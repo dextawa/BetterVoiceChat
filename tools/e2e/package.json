@@ -1,0 +1,9 @@
+{
+  "name": "bvc-e2e",
+  "private": true,
+  "description": "End-to-end test of BetterVoiceChat against real Velocity and Paper servers",
+  "license": "MIT",
+  "dependencies": {
+    "mineflayer": "4.39.0"
+  }
+}

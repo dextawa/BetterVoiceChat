@@ -1,0 +1,50 @@
+# BetterVoiceChat 代理端（BungeeCord / Velocity）配置
+# 修改后执行 /bvc reload 生效（传输相关的端口设置需要重启）。
+config-version: 1
+
+transport:
+  # AUTO：先尝试独立连接（A，和 MC 同端口），失败自动改用插件消息（B）
+  # STREAM_ONLY：只用 A        PLUGIN_MESSAGE_ONLY：只用 B
+  policy: AUTO
+  # 客户端建立 A 连接时使用的地址。留空 / 0 = 和玩家连接 MC 时用的地址、端口相同
+  stream-host: ""
+  stream-port: 0
+  # 客户端尝试 A 的超时时间，超时后改用 B（毫秒）
+  connect-timeout-ms: 5000
+  # 同时存在的"还没完成鉴权"的 A 连接上限，超过直接断开
+  max-pending-connections: 256
+  # A 连接必须在这个时间内完成鉴权（毫秒）
+  auth-timeout-ms: 5000
+  # A 连接多久没收到任何数据就断开（秒，客户端每 5 秒发一次心跳）
+  idle-timeout-seconds: 30
+
+client:
+  # true：没装 Mod 的玩家会被踢出；false：允许进服，只是没有语音
+  require-mod: false
+  # 进服后多少秒内没检测到 Mod 视为未安装
+  mod-detect-timeout-seconds: 10
+  download-url: "https://example.com/bettervoicechat"
+  # 基岩版（Geyser / Floodgate）玩家装不了 Mod，不强制
+  exempt-bedrock: true
+  # 不强制装 Mod 的子服（例如登录服）
+  require-mod-exempt-servers: []
+
+audio:
+  # Opus 码率（bps），由服务器统一下发给所有客户端。16000 对人声足够
+  bitrate: 16000
+  # 每个听众同时最多接收几路语音，优先级高的优先
+  max-streams-per-listener: 8
+  # 高优先级的人说话时，其他人被压低多少分贝
+  ducking-db: 12.0
+
+priority:
+  # 代理端优先级权限：bvc.priority.<数字>，取玩家拥有的最大值（0-255）
+  levels: [10, 50, 100, 200]
+
+# 没有安装 BVC 子服插件的子服怎么处理：
+# DISABLED：没有语音    FREE：该子服内所有人互相能听到（自由麦）
+servers-without-plugin: DISABLED
+
+storage:
+  # 目前支持 H2（内置，单文件，无需配置）
+  type: H2

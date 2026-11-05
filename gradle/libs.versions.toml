@@ -1,0 +1,32 @@
+[versions]
+# Velocity 4 publishes Java 25 bytecode; the 3.4 API is identical for us and runs on 3.x and 4.x.
+velocity = "3.4.0"
+bungeecord = "26.1-R0.1-SNAPSHOT"
+spigot-legacy = "1.8.8-R0.1-SNAPSHOT"
+# Oldest Paper API with Folia's region schedulers that still targets Java 17.
+paper-folia = "1.20.4-R0.1-SNAPSHOT"
+netty = "4.1.140.Final"
+gson = "2.15.0"
+snakeyaml = "2.7"
+h2 = "2.5.252"
+concentus = "1.0.2"
+junit = "6.1.3"
+shadow = "9.6.1"
+
+[libraries]
+velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
+bungeecord-api = { module = "net.md-5:bungeecord-api", version.ref = "bungeecord" }
+spigot-api-legacy = { module = "org.spigotmc:spigot-api", version.ref = "spigot-legacy" }
+paper-api-folia = { module = "io.papermc.paper:paper-api", version.ref = "paper-folia" }
+netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
+netty-codec = { module = "io.netty:netty-codec", version.ref = "netty" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }
+concentus = { module = "io.github.jaredmdobson:concentus", version.ref = "concentus" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

@@ -1,0 +1,51 @@
+# 端到端测试
+
+用真实的 Velocity + Paper 服务端和机器人客户端测试整条链路：
+机器人（BVC 协议）→ BC 插件 → 子服插件 → BC 查表转发 → 另一个机器人。
+
+两个机器人：BotA 走传输方式 B（插件消息），BotB 走传输方式 A（同端口的第二条连接，ECDH + AES）。
+机器人用 [mineflayer](https://github.com/PrismarineJS/mineflayer)，行为和原版客户端一致（确认传送、确认区块等），BVC 的消息走它底层的连接。
+
+## 场景
+
+| 命令 | 内容 |
+|---|---|
+| `node e2e.js 25599 1.21.4` | 基础：握手、A/B 两种传输、子服下发区域、双向听到、顺序、结束包、心跳、不回声 |
+| `node e2e.js 25599 1.21.4 zones <子服 config.yml 路径>` | 规则：范围内外（48 格边界）、配置重载切换组队麦、计分板队伍、队伍不限距离、退队、自由麦、旁观者两种策略、按世界设置区域 |
+
+`zones` 会临时修改子服的 `config.yml`，结束时恢复。它通过 RCON 执行 `tp`、`team`、`gamemode`、`bvcs reload` 等命令。
+
+## 准备
+
+1. 构建：在仓库根目录执行 `./gradlew build`。
+2. Paper（例如 1.21.4）：
+   - `plugins/` 放入 `backend/bukkit/build/libs/BetterVoiceChat-Bukkit-*.jar`
+   - `server.properties`：
+     ```
+     online-mode=false
+     server-ip=127.0.0.1
+     server-port=25601
+     difficulty=peaceful
+     enable-rcon=true
+     rcon.port=25611
+     rcon.password=<自己设一个>
+     ```
+3. Velocity（3.4+ 或 4.x）：
+   - `plugins/` 放入 `proxy/velocity/build/libs/BetterVoiceChat-Velocity-*.jar`
+   - 先启动一次生成 `velocity.toml`，然后：
+     ```bash
+     python configure_velocity.py path/to/velocity.toml
+     ```
+     它会把子服指向 `127.0.0.1:25601`、关闭正版验证和转发。另外把 `bind` 改成 `127.0.0.1:25599`，`login-ratelimit` 改成 `0`（两个机器人同时登录）。
+4. 安装依赖并运行：
+   ```bash
+   npm install --ignore-scripts
+   node e2e.js 25599 1.21.4
+   ```
+
+必须用环境变量 `BVC_RCON_PASSWORD` 传入上面设置的 RCON 密码；`BVC_HOST`、`BVC_RCON_PORT` 可覆盖默认值。
+
+## 注意
+
+- 两个场景之间 Paper 会记住机器人的位置，所以脚本开始时会用 RCON 把它们传送到一起。
+- 输出每一项 `PASS` / `FAIL`，全部通过时退出码为 0。

@@ -1,0 +1,9 @@
+name: BetterVoiceChat
+main: top.dext.bvc.proxy.bungee.BvcBungeePlugin
+version: ${version}
+author: dext.top
+description: TCP voice chat for Minecraft networks with mutes, replays and reports
+softDepends:
+  - ViaVersion
+  - Geyser-BungeeCord
+  - floodgate

@@ -1,0 +1,249 @@
+package top.dext.bvc.mod;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
+import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.SharedConstants;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
+import top.dext.bvc.client.ClientLogger;
+import top.dext.bvc.client.ClientPlatform;
+import top.dext.bvc.client.ClientSettings;
+import top.dext.bvc.client.VoiceClient;
+import top.dext.bvc.client.audio.JavaSoundDevices;
+
+/**
+ * Glue between Minecraft and the voice client, shared by the Fabric, Forge and NeoForge entry
+ * points. Loader-specific code only registers events and sends payloads.
+ */
+public final class BvcModClient {
+
+    public static final String MOD_ID = "bettervoicechat";
+    private static final Logger LOGGER = LoggerFactory.getLogger("BetterVoiceChat");
+
+    private static BvcModClient instance;
+
+    private final String loader;
+    private final Consumer<BvcPayload> sender;
+    private final VoiceClient voice;
+    private final VoiceHud hud;
+
+    public KeyMapping talkKey;
+    public KeyMapping broadcastKey;
+    public KeyMapping muteKey;
+    public KeyMapping deafenKey;
+
+    private BvcModClient(String loader, Consumer<BvcPayload> sender) {
+        this.loader = loader;
+        this.sender = sender;
+        Path config = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("bettervoicechat.properties");
+        this.voice = new VoiceClient(new Platform(), ClientSettings.load(config), new JavaSoundDevices());
+        this.hud = new VoiceHud(voice);
+    }
+
+    /** Translation key of the key mapping category before 26.x (a plain string there). */
+    public static final String KEY_CATEGORY = "key.category.bettervoicechat.main";
+
+    /** Called once by the loader entry point. */
+    public static BvcModClient init(String loader, Consumer<BvcPayload> sender) {
+        if (instance == null) {
+            instance = new BvcModClient(loader, sender);
+        }
+        return instance;
+    }
+
+    public static BvcModClient get() {
+        return instance;
+    }
+
+    public VoiceClient voice() {
+        return voice;
+    }
+
+    public VoiceHud hud() {
+        return hud;
+    }
+
+    /** Creates the key mappings; the entry point registers them with its loader. */
+    //? if >=26 {
+    public KeyMapping[] createKeys(KeyMapping.Category category) {
+    //?} else {
+    /*public KeyMapping[] createKeys(String category) {
+    *///?}
+        talkKey = new KeyMapping("key.bettervoicechat.talk", InputConstants.KEY_V, category);
+        broadcastKey = new KeyMapping("key.bettervoicechat.broadcast", InputConstants.KEY_B, category);
+        muteKey = new KeyMapping("key.bettervoicechat.mute", InputConstants.KEY_M, category);
+        deafenKey = new KeyMapping("key.bettervoicechat.deafen", InputConstants.KEY_N, category);
+        return new KeyMapping[] {talkKey, broadcastKey, muteKey, deafenKey};
+    }
+
+    // ------------------------------------------------------------------ events from the loader
+
+    /** The play state is ready (first join, or after a proxy server switch). */
+    public void onJoin(Connection connection) {
+        SocketAddress remote = connection.getRemoteAddress();
+        if (!(remote instanceof InetSocketAddress address)) {
+            return; // singleplayer / LAN integrated server: no proxy, no voice
+        }
+        ServerData server = Minecraft.getInstance().getCurrentServer();
+        voice.onJoinServer(address, server == null ? "" : hostOf(server.ip));
+    }
+
+    public void onDisconnect() {
+        voice.onDisconnect();
+    }
+
+    public void onPayload(BvcPayload payload) {
+        voice.onPluginMessage(payload.data());
+    }
+
+    /** Once per client tick, on the game thread. */
+    public void onTick(Minecraft mc) {
+        if (talkKey == null) {
+            return;
+        }
+        voice.setTalkKey(talkKey.isDown());
+        voice.setBroadcastKey(broadcastKey.isDown());
+        while (muteKey.consumeClick()) {
+            voice.toggleMicrophoneMuted();
+        }
+        while (deafenKey.consumeClick()) {
+            voice.toggleDeafened();
+        }
+
+        if (mc.player == null || mc.level == null) {
+            voice.positions().clear();
+            return;
+        }
+        Map<UUID, double[]> others = new HashMap<>();
+        for (AbstractClientPlayer player : mc.level.players()) {
+            if (player != mc.player) {
+                others.put(player.getUUID(), new double[] {player.getX(), player.getEyeY(), player.getZ()});
+            }
+        }
+        voice.positions().update(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), mc.player.getYRot(), others);
+    }
+
+    public void onShutdown() {
+        voice.settings().save();
+        voice.shutdown();
+    }
+
+    /** "play.example.com:25565" -> "play.example.com" (keeps IPv6 literals intact). */
+    static String hostOf(String ip) {
+        if (ip == null) {
+            return "";
+        }
+        String value = ip.trim();
+        if (value.startsWith("[")) {
+            int end = value.indexOf(']');
+            return end > 0 ? value.substring(1, end) : value;
+        }
+        int colon = value.lastIndexOf(':');
+        return colon > 0 && value.indexOf(':') == colon ? value.substring(0, colon) : value;
+    }
+
+    private static String modVersion() {
+        Properties properties = new Properties();
+        try (InputStream in = BvcModClient.class.getResourceAsStream("/bvc-mod.properties")) {
+            if (in != null) {
+                properties.load(in);
+            }
+        } catch (IOException ignored) {
+            // fall through
+        }
+        return properties.getProperty("version", "unknown");
+    }
+
+    private final class Platform implements ClientPlatform {
+        private final String version = modVersion();
+        private final ClientLogger logger = new ClientLogger() {
+            @Override
+            public void info(String message) {
+                LOGGER.info(message);
+            }
+
+            @Override
+            public void warn(String message) {
+                LOGGER.warn(message);
+            }
+
+            @Override
+            public void warn(String message, Throwable error) {
+                LOGGER.warn(message, error);
+            }
+
+            @Override
+            public void debug(String message) {
+                LOGGER.debug(message);
+            }
+        };
+
+        @Override
+        public void sendPluginMessage(byte[] payload) {
+            Minecraft mc = Minecraft.getInstance();
+            // Payloads must leave on the game thread; the capture thread sends B-transport audio.
+            mc.execute(() -> {
+                if (mc.getConnection() != null) {
+                    sender.accept(new BvcPayload(payload));
+                }
+            });
+        }
+
+        @Override
+        public String minecraftVersion() {
+            //? if >=26 {
+            return SharedConstants.getCurrentVersion().name();
+            //?} else {
+            /*return SharedConstants.getCurrentVersion().getName();
+            *///?}
+        }
+
+        @Override
+        public String loader() {
+            return loader;
+        }
+
+        @Override
+        public String modVersion() {
+            return version;
+        }
+
+        @Override
+        public int minecraftProtocol() {
+            return SharedConstants.getProtocolVersion();
+        }
+
+        @Override
+        public void showMessage(String text) {
+            Minecraft mc = Minecraft.getInstance();
+            mc.execute(() -> {
+                if (mc.player != null) {
+                    mc.player.sendSystemMessage(Component.literal("[BVC] " + text));
+                }
+            });
+        }
+
+        @Override
+        public ClientLogger logger() {
+            return logger;
+        }
+    }
+}

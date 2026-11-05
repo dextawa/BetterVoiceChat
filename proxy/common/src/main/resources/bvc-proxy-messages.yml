@@ -1,0 +1,36 @@
+# BetterVoiceChat 提示文字。支持 & 颜色代码，{xxx} 为占位符。
+prefix: "&8[&bBVC&8] &r"
+
+no-permission: "&c你没有权限执行这个命令。"
+player-not-found: "&c找不到玩家 &f{player}&c（需要对方至少进过一次服务器）。"
+invalid-duration: "&c时长格式不对：&f{input}&c。示例：30m、2h、7d、perm"
+reload-done: "&a配置已重新加载。"
+
+kick-no-mod: "&c本服务器需要安装 BetterVoiceChat 语音 Mod 才能进入\n\n&7下载地址：&f{url}"
+mod-incompatible: "&eBVC 语音 Mod 版本与服务器不兼容（服务器协议 {server}，你的协议 {client}），请更新 Mod。"
+
+duration-permanent: "永久"
+scope-global: "全服"
+scope-server: "子服 {server}"
+
+mute-done: "&a已禁麦 &f{player}&a，范围：&f{scope}&a，时长：&f{duration}&a，原因：&f{reason}"
+unmute-done: "&a已解除 &f{player} &a在 &f{scope} &a的禁麦。"
+unmute-none: "&e{player} 在 {scope} 没有生效中的禁麦。"
+notify-muted: "&c你已被禁麦。范围：&f{scope}&c，时长：&f{duration}&c，原因：&f{reason}"
+notify-unmuted: "&a你的禁麦已解除（{scope}）。"
+
+globalmute-on: "&c管理员开启了全服禁麦。"
+globalmute-off: "&a全服禁麦已关闭。"
+servermute-on: "&c管理员开启了子服 &f{server} &c的禁麦。"
+servermute-off: "&a子服 &f{server} &a的禁麦已关闭。"
+
+status-header: "&b{player} &7的语音状态："
+status-line: "&7- {key}：&f{value}"
+
+help:
+  - "&b/bvc mute <玩家> [子服|*] [时长] [原因] &7- 禁麦（默认全服、永久）"
+  - "&b/bvc unmute <玩家> [子服|*] &7- 解除禁麦"
+  - "&b/bvc globalmute <on|off> &7- 全服禁麦开关"
+  - "&b/bvc servermute <子服> <on|off> &7- 子服禁麦开关"
+  - "&b/bvc status <玩家> &7- 查看语音状态"
+  - "&b/bvc reload &7- 重新加载配置"

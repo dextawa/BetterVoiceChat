@@ -1,0 +1,44 @@
+# BetterVoiceChat 子服配置
+# 这个子服的语音规则由这里决定，玩家不能自己切换。修改后执行 /bvcs reload 生效。
+# 小游戏插件可以通过 API 创建"房间"，房间内的规则优先于这里。
+
+# 默认语音区域
+zone:
+  # PROXIMITY       范围麦：同一世界、半径以内能听到
+  # TEAM            组队麦：只有队友能听到，不限距离
+  # FREE            自由麦：本子服所有人互相能听到，不限距离
+  # TEAM_PROXIMITY  队友不限距离 + 其他人按范围
+  # DISABLED        这个子服不开放语音
+  mode: PROXIMITY
+  # ANY：按键说话或声控都可以      PTT_ONLY：只允许按键说话
+  activation: ANY
+  # 范围麦的听声距离（格），建议不超过服务端的实体追踪距离
+  radius: 48
+
+# 按世界单独设置（可选）。写在这里的世界是一个独立区域，和其他世界互相听不到。
+worlds: {}
+#  arena:
+#    mode: FREE
+#    activation: PTT_ONLY
+#  world_nether:
+#    mode: PROXIMITY
+#    radius: 24
+
+teams:
+  # 组队麦的队伍来源。true：使用计分板队伍；false：只用插件 API 设置的分组
+  use-scoreboard: true
+
+# 旁观模式的玩家（常见于小游戏里死亡的玩家）：
+# SAME         和普通玩家一样
+# LISTEN_ONLY  只能听，不能说
+# SEPARATE     只和其他旁观者互相听到（活着的玩家听不到他们，他们也听不到活着的玩家）
+spectators: SAME
+
+# 子服权限 bvc.priority.<数字> 对应的说话优先级（0-255，取玩家拥有的最大值）
+# 代理端也有同名权限，最终取两边的较大值。拥有 bvc.broadcast 的玩家可以按广播键对整个区域说话。
+priority-levels: [10, 50, 100, 200]
+
+# 每隔多少 tick 重新计算一次谁能听到谁（2 tick = 0.1 秒）
+update-interval-ticks: 2
+# 每隔多少秒向 BC 全量重发一次（丢包或重启后自动恢复）
+full-resync-seconds: 5

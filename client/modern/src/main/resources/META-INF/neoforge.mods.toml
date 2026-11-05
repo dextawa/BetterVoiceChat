@@ -1,0 +1,19 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "bettervoicechat"
+version = "${version}"
+displayName = "BetterVoiceChat"
+authors = "dext.top"
+description = '''TCP voice chat for Minecraft networks. Server-decided voice zones, push-to-talk, mutes and reports.'''
+# Client-only: never mark servers as incompatible in the server list.
+displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies.bettervoicechat]]
+modId = "minecraft"
+type = "required"
+versionRange = "[${minecraft},)"
+ordering = "NONE"
+side = "CLIENT"

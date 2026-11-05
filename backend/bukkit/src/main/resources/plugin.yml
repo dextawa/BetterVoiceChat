@@ -1,0 +1,19 @@
+name: BetterVoiceChat
+main: top.dext.bvc.backend.BvcBukkitPlugin
+version: ${version}
+author: dext.top
+description: BetterVoiceChat sub-server side; decides who can hear whom
+api-version: "1.13"
+folia-supported: true
+commands:
+  bvcs:
+    description: BetterVoiceChat sub-server tools
+    usage: /bvcs <info|player|rooms|reload>
+    permission: bvc.admin
+permissions:
+  bvc.admin:
+    description: Use /bvcs
+    default: op
+  bvc.broadcast:
+    description: Talk to the whole zone with the broadcast key
+    default: false
