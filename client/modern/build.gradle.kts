@@ -88,6 +88,21 @@ tasks.named<ProcessResources>("processResources") {
     if (loader != "fabric") exclude("fabric.mod.json")
     if (loader == "fabric") exclude("META-INF/neoforge.mods.toml", "pack.mcmeta")
     if (legacyModsToml) rename("neoforge\\.mods\\.toml", "mods.toml")
+    // Forge only loads a mod's assets (translations) when the jar has a pack.mcmeta.
+    if (loader == "forge") {
+        val packFormat = when {
+            stonecutter.eval(minecraftVersion, "<1.17") -> 6
+            stonecutter.eval(minecraftVersion, "<1.19") -> 8
+            stonecutter.eval(minecraftVersion, "<1.19.3") -> 9
+            stonecutter.eval(minecraftVersion, "<1.20") -> 13
+            else -> 15
+        }
+        inputs.property("packFormat", packFormat)
+        doLast {
+            destinationDir.resolve("pack.mcmeta").writeText(
+                """{"pack":{"description":"BetterVoiceChat","pack_format":$packFormat}}""")
+        }
+    }
 }
 
 tasks.named<Jar>("jar") {

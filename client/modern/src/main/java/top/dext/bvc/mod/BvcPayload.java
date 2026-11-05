@@ -17,7 +17,7 @@ import top.dext.bvc.protocol.BvcProtocol;
 /**
  * The raw bytes of one {@code bvc:voice} plugin message. The client core does all decoding.
  */
-public record BvcPayload(byte[] data) /*? if >=1.20.2 {*/ implements CustomPacketPayload /*?}*/ {
+public final class BvcPayload /*? if >=1.20.2 {*/ implements CustomPacketPayload /*?}*/ {
 
     //? if >=1.21.11 {
     public static final Identifier ID = Identifier.parse(BvcProtocol.CHANNEL_VOICE);
@@ -42,6 +42,16 @@ public record BvcPayload(byte[] data) /*? if >=1.20.2 {*/ implements CustomPacke
         return ID;
     }
     *///?}
+
+    private final byte[] data;
+
+    public BvcPayload(byte[] data) {
+        this.data = data;
+    }
+
+    public byte[] data() {
+        return data;
+    }
 
     public static BvcPayload read(FriendlyByteBuf buf) {
         byte[] data = new byte[buf.readableBytes()];

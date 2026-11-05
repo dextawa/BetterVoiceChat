@@ -11,10 +11,18 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+//? if >=1.18 {
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+//?} else {
+/*import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+*///?}
+//? if >=1.17 {
 import com.mojang.blaze3d.platform.InputConstants;
+//?} else {
+/*import org.lwjgl.glfw.GLFW;
+*///?}
 
 import net.minecraft.SharedConstants;
 import net.minecraft.client.KeyMapping;
@@ -22,7 +30,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.Connection;
-import net.minecraft.network.chat.Component;
 //? if >=1.21.11 {
 import net.minecraft.resources.Identifier;
 //?} else {
@@ -41,7 +48,11 @@ import top.dext.bvc.client.audio.JavaSoundDevices;
 public final class BvcModClient {
 
     public static final String MOD_ID = "bettervoicechat";
+    //? if >=1.18 {
     private static final Logger LOGGER = LoggerFactory.getLogger("BetterVoiceChat");
+    //?} else {
+    /*private static final Logger LOGGER = LogManager.getLogger("BetterVoiceChat");
+    *///?}
 
     private static BvcModClient instance;
 
@@ -101,16 +112,23 @@ public final class BvcModClient {
         return hud;
     }
 
+    // Default keys V / B / M / N (InputConstants has no KEY_* constants before 1.17).
+    //? if >=1.17 {
+    private static final int KEY_V = InputConstants.KEY_V, KEY_B = InputConstants.KEY_B, KEY_M = InputConstants.KEY_M, KEY_N = InputConstants.KEY_N;
+    //?} else {
+    /*private static final int KEY_V = GLFW.GLFW_KEY_V, KEY_B = GLFW.GLFW_KEY_B, KEY_M = GLFW.GLFW_KEY_M, KEY_N = GLFW.GLFW_KEY_N;
+    *///?}
+
     /** Creates the key mappings; the entry point registers them with its loader. */
     //? if >=1.21.9 {
     public KeyMapping[] createKeys(KeyMapping.Category category) {
     //?} else {
     /*public KeyMapping[] createKeys(String category) {
     *///?}
-        talkKey = new KeyMapping("key.bettervoicechat.talk", InputConstants.KEY_V, category);
-        broadcastKey = new KeyMapping("key.bettervoicechat.broadcast", InputConstants.KEY_B, category);
-        muteKey = new KeyMapping("key.bettervoicechat.mute", InputConstants.KEY_M, category);
-        deafenKey = new KeyMapping("key.bettervoicechat.deafen", InputConstants.KEY_N, category);
+        talkKey = new KeyMapping("key.bettervoicechat.talk", KEY_V, category);
+        broadcastKey = new KeyMapping("key.bettervoicechat.broadcast", KEY_B, category);
+        muteKey = new KeyMapping("key.bettervoicechat.mute", KEY_M, category);
+        deafenKey = new KeyMapping("key.bettervoicechat.deafen", KEY_N, category);
         return new KeyMapping[] {talkKey, broadcastKey, muteKey, deafenKey};
     }
 
@@ -119,9 +137,10 @@ public final class BvcModClient {
     /** The play state is ready (first join, or after a proxy server switch). */
     public void onJoin(Connection connection) {
         SocketAddress remote = connection.getRemoteAddress();
-        if (!(remote instanceof InetSocketAddress address)) {
+        if (!(remote instanceof InetSocketAddress)) {
             return; // singleplayer / LAN integrated server: no proxy, no voice
         }
+        InetSocketAddress address = (InetSocketAddress) remote;
         ServerData server = Minecraft.getInstance().getCurrentServer();
         voice.onJoinServer(address, server == null ? "" : hostOf(server.ip));
     }
@@ -158,7 +177,12 @@ public final class BvcModClient {
                 others.put(player.getUUID(), new double[] {player.getX(), player.getEyeY(), player.getZ()});
             }
         }
-        voice.positions().update(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), mc.player.getYRot(), others);
+        //? if >=1.17 {
+        float yaw = mc.player.getYRot();
+        //?} else {
+        /*float yaw = mc.player.yRot;
+        *///?}
+        voice.positions().update(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), yaw, others);
     }
 
     public void onShutdown() {
@@ -257,9 +281,9 @@ public final class BvcModClient {
             mc.execute(() -> {
                 if (mc.player != null) {
                     //? if >=26 {
-                    mc.player.sendSystemMessage(Component.literal("[BVC] " + text));
+                    mc.player.sendSystemMessage(VoiceHud.literal("[BVC] " + text));
                     //?} else {
-                    /*mc.player.displayClientMessage(Component.literal("[BVC] " + text), false);
+                    /*mc.player.displayClientMessage(VoiceHud.literal("[BVC] " + text), false);
                     *///?}
                 }
             });

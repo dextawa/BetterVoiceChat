@@ -4,10 +4,18 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 //? if >=26 {
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-//?} else {
+//?} else if >=1.20 {
 /*import net.minecraft.client.gui.GuiGraphics;
+*///?} else {
+/*import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.gui.GuiComponent;
 *///?}
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+//? if <1.19 {
+/*import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.TranslatableComponent;
+*///?}
 import top.dext.bvc.client.ActivationMode;
 import top.dext.bvc.client.ClientStatus;
 import top.dext.bvc.client.VoiceClient;
@@ -37,8 +45,10 @@ public final class VoiceHud {
 
     //? if >=26 {
     public void render(GuiGraphicsExtractor graphics) {
-    //?} else {
+    //?} else if >=1.20 {
     /*public void render(GuiGraphics graphics) {
+    *///?} else {
+    /*public void render(PoseStack graphics) {
     *///?}
         Minecraft mc = Minecraft.getInstance();
         // F1 (hidden HUD) is handled by the game: HUD layers are not drawn at all then.
@@ -67,77 +77,121 @@ public final class VoiceHud {
             }
             int color = speaking.category == AudioCategory.BROADCAST ? GOLD
                     : speaking.category == AudioCategory.GROUP ? GREEN : WHITE;
-            drawBoxed(graphics, font, Component.literal("▶ ").append(speaking.name), 4, top, color);
+            drawBoxed(graphics, font, literal("▶ ").append(speaking.name), 4, top, color);
             top += font.lineHeight + 3;
         }
     }
 
-    private record Line(Component text, int color) {
+    private static final class Line {
+        final Component text;
+        final int color;
+
+        Line(Component text, int color) {
+            this.text = text;
+            this.color = color;
+        }
     }
 
     private static Line stateLine(ClientStatus status) {
         switch (status.phase) {
             case CONNECTING:
-                return new Line(Component.translatable("hud.bettervoicechat.connecting"), GRAY);
+                return new Line(tr("hud.bettervoicechat.connecting"), GRAY);
             case RECONNECTING:
-                return new Line(Component.translatable("hud.bettervoicechat.reconnecting"), YELLOW);
+                return new Line(tr("hud.bettervoicechat.reconnecting"), YELLOW);
             case INCOMPATIBLE:
-                return new Line(Component.translatable("hud.bettervoicechat.incompatible"), RED);
+                return new Line(tr("hud.bettervoicechat.incompatible"), RED);
             default:
                 break;
         }
         ProxyToClient.MuteStatus mute = status.mute;
         if (mute != null && mute.muted) {
-            Component text = Component.translatable("hud.bettervoicechat.muted");
+            Component text = tr("hud.bettervoicechat.muted");
             if (mute.expiresAt > 0) {
                 long minutes = Math.max(1, (mute.expiresAt - System.currentTimeMillis() + 59_999) / 60_000);
-                text = Component.translatable("hud.bettervoicechat.muted_for", minutes);
+                text = tr("hud.bettervoicechat.muted_for", minutes);
             }
             return new Line(text, RED);
         }
         if (!status.inputAvailable) {
-            return new Line(Component.translatable("hud.bettervoicechat.no_microphone"), RED);
+            return new Line(tr("hud.bettervoicechat.no_microphone"), RED);
         }
         if (status.deafened) {
-            return new Line(Component.translatable("hud.bettervoicechat.deafened"), RED);
+            return new Line(tr("hud.bettervoicechat.deafened"), RED);
         }
         if (status.microphoneMuted) {
-            return new Line(Component.translatable("hud.bettervoicechat.mic_off"), GRAY);
+            return new Line(tr("hud.bettervoicechat.mic_off"), GRAY);
         }
         if (status.voice != null && !status.voice.canSpeak) {
-            return new Line(Component.translatable("hud.bettervoicechat.cannot_speak"), GRAY);
+            return new Line(tr("hud.bettervoicechat.cannot_speak"), GRAY);
         }
         if (status.talking) {
-            return new Line(Component.translatable("hud.bettervoicechat.talking"), GREEN);
+            return new Line(tr("hud.bettervoicechat.talking"), GREEN);
         }
-        return new Line(Component.translatable(status.activation == ActivationMode.VOICE
+        return new Line(tr(status.activation == ActivationMode.VOICE
                 ? "hud.bettervoicechat.listening_voice" : "hud.bettervoicechat.ready"), WHITE);
     }
 
     private static Component zoneText(ClientStatus status) {
         ProxyToClient.VoiceState state = status.voice;
-        Component mode = switch (state.mode) {
-            case PROXIMITY -> Component.translatable("hud.bettervoicechat.mode.proximity", (int) state.radius);
-            case TEAM -> Component.translatable("hud.bettervoicechat.mode.team");
-            case FREE -> Component.translatable("hud.bettervoicechat.mode.free");
-            case TEAM_PROXIMITY -> Component.translatable("hud.bettervoicechat.mode.team_proximity", (int) state.radius);
-            default -> Component.translatable("hud.bettervoicechat.mode.disabled");
-        };
-        Component activation = Component.translatable("hud.bettervoicechat.activation." + status.activation.name().toLowerCase());
-        return Component.empty().append(mode).append(" · ").append(activation);
+        Component mode;
+        switch (state.mode) {
+            case PROXIMITY:
+                mode = tr("hud.bettervoicechat.mode.proximity", (int) state.radius);
+                break;
+            case TEAM:
+                mode = tr("hud.bettervoicechat.mode.team");
+                break;
+            case FREE:
+                mode = tr("hud.bettervoicechat.mode.free");
+                break;
+            case TEAM_PROXIMITY:
+                mode = tr("hud.bettervoicechat.mode.team_proximity", (int) state.radius);
+                break;
+            default:
+                mode = tr("hud.bettervoicechat.mode.disabled");
+                break;
+        }
+        Component activation = tr("hud.bettervoicechat.activation." + status.activation.name().toLowerCase());
+        return literal("").append(mode).append(" · ").append(activation);
     }
 
     //? if >=26 {
     private static void drawBoxed(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int color) {
-    //?} else {
+    //?} else if >=1.20 {
     /*private static void drawBoxed(GuiGraphics graphics, Font font, Component text, int x, int y, int color) {
+    *///?} else {
+    /*private static void drawBoxed(PoseStack graphics, Font font, Component text, int x, int y, int color) {
     *///?}
         int width = font.width(text);
+        //? if >=1.20 {
         graphics.fill(x - 2, y - 2, x + width + 2, y + font.lineHeight, BACKGROUND);
+        //?} else {
+        /*GuiComponent.fill(graphics, x - 2, y - 2, x + width + 2, y + font.lineHeight, BACKGROUND);
+        *///?}
         //? if >=26 {
         graphics.text(font, text, x, y, color, false);
-        //?} else {
+        //?} else if >=1.20 {
         /*graphics.drawString(font, text, x, y, color, false);
+        *///?} else {
+        /*font.draw(graphics, text, x, y, color);
+        *///?}
+    }
+
+    // Text components: 1.19 replaced TextComponent / TranslatableComponent with factory methods.
+
+    static MutableComponent literal(String text) {
+        //? if >=1.19 {
+        return literal(text);
+        //?} else {
+        /*return new TextComponent(text);
+        *///?}
+    }
+
+    static MutableComponent tr(String key, Object... args) {
+        //? if >=1.19 {
+        return tr(key, args);
+        //?} else {
+        /*return new TranslatableComponent(key, args);
         *///?}
     }
 }

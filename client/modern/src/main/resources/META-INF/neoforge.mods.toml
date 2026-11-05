@@ -13,6 +13,8 @@ displayTest = "IGNORE_ALL_VERSION"
 
 [[dependencies.bettervoicechat]]
 modId = "minecraft"
+# "mandatory" for Forge, "type" for NeoForge; each loader ignores the other key.
+mandatory = true
 type = "required"
 versionRange = "${forgeRange}"
 ordering = "NONE"
