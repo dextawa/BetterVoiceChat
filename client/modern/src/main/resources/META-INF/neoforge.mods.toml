@@ -14,6 +14,6 @@ displayTest = "IGNORE_ALL_VERSION"
 [[dependencies.bettervoicechat]]
 modId = "minecraft"
 type = "required"
-versionRange = "[${minecraft},)"
+versionRange = "${forgeRange}"
 ordering = "NONE"
 side = "CLIENT"

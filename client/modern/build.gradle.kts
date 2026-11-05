@@ -73,7 +73,16 @@ tasks.named<JavaCompile>("compileJava") {
 val legacyModsToml = loader == "forge" || (loader == "neoforge" && stonecutter.eval(minecraftVersion, "<1.20.5"))
 
 tasks.named<ProcessResources>("processResources") {
-    val props = mapOf("version" to project.version.toString(), "minecraft" to minecraftVersion)
+    // mc.range = "<lowest> <highest>" Minecraft versions this node's jar is declared to run on.
+    val range = (findProperty("mc.range") as String? ?: minecraftVersion).split(" ")
+    val low = range.first()
+    val high = range.last()
+    val props = mapOf(
+        "version" to project.version.toString(),
+        "minecraft" to minecraftVersion,
+        "fabricRange" to ">=$low <=$high",
+        "forgeRange" to "[$low,$high]",
+    )
     inputs.properties(props)
     filesMatching(listOf("fabric.mod.json", "META-INF/neoforge.mods.toml", "bvc-mod.properties")) { expand(props) }
     if (loader != "fabric") exclude("fabric.mod.json")

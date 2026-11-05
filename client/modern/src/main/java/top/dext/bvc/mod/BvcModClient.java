@@ -23,6 +23,11 @@ import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+//? if >=1.21.11 {
+import net.minecraft.resources.Identifier;
+//?} else {
+/*import net.minecraft.resources.ResourceLocation;
+*///?}
 import top.dext.bvc.client.ClientLogger;
 import top.dext.bvc.client.ClientPlatform;
 import top.dext.bvc.client.ClientSettings;
@@ -58,8 +63,23 @@ public final class BvcModClient {
         this.hud = new VoiceHud(voice);
     }
 
-    /** Translation key of the key mapping category before 26.x (a plain string there). */
+    /** Translation key of the key mapping category before 1.21.9 (a plain string there). */
     public static final String KEY_CATEGORY = "key.category.bettervoicechat.main";
+
+    /** {@code bettervoicechat:<path>}; the id type was renamed to Identifier in 1.21.11. */
+    //? if >=1.21.11 {
+    public static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath(MOD_ID, path);
+    }
+    //?} else if >=1.21 {
+    /*public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+    }
+    *///?} else {
+    /*public static ResourceLocation id(String path) {
+        return new ResourceLocation(MOD_ID, path);
+    }
+    *///?}
 
     /** Called once by the loader entry point. */
     public static BvcModClient init(String loader, Consumer<BvcPayload> sender) {
@@ -82,7 +102,7 @@ public final class BvcModClient {
     }
 
     /** Creates the key mappings; the entry point registers them with its loader. */
-    //? if >=26 {
+    //? if >=1.21.9 {
     public KeyMapping[] createKeys(KeyMapping.Category category) {
     //?} else {
     /*public KeyMapping[] createKeys(String category) {
@@ -209,7 +229,7 @@ public final class BvcModClient {
 
         @Override
         public String minecraftVersion() {
-            //? if >=26 {
+            //? if >=1.21.6 {
             return SharedConstants.getCurrentVersion().name();
             //?} else {
             /*return SharedConstants.getCurrentVersion().getName();
@@ -236,7 +256,11 @@ public final class BvcModClient {
             Minecraft mc = Minecraft.getInstance();
             mc.execute(() -> {
                 if (mc.player != null) {
+                    //? if >=26 {
                     mc.player.sendSystemMessage(Component.literal("[BVC] " + text));
+                    //?} else {
+                    /*mc.player.displayClientMessage(Component.literal("[BVC] " + text), false);
+                    *///?}
                 }
             });
         }

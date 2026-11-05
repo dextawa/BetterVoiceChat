@@ -13,6 +13,6 @@
   "depends": {
     "fabricloader": ">=0.16",
     "fabric-api": "*",
-    "minecraft": "${minecraft}"
+    "minecraft": "${fabricRange}"
   }
 }

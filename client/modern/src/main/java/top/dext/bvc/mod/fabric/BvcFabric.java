@@ -9,17 +9,17 @@ import top.dext.bvc.mod.BvcModClient;
 import top.dext.bvc.mod.BvcPayload;
 //? if >=26 {
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.minecraft.resources.Identifier;
 //?} else {
 /*import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 *///?}
-//? if >=1.20.5 && <26 {
-/*import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+//? if >=1.21.6 {
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+//?} else {
+/*import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 *///?}
-//? if <1.20.5 {
+//? if >=1.20.5 {
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+//?} else {
 /*import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.network.FriendlyByteBuf;
 *///?}
@@ -34,14 +34,15 @@ public final class BvcFabric implements ClientModInitializer {
         //? if >=26 {
         PayloadTypeRegistry.clientboundPlay().register(BvcPayload.TYPE, BvcPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(BvcPayload.TYPE, BvcPayload.CODEC);
-        BvcModClient client = BvcModClient.init("fabric", ClientPlayNetworking::send);
-        ClientPlayNetworking.registerGlobalReceiver(BvcPayload.TYPE, (payload, context) -> client.onPayload(payload));
         //?} else if >=1.20.5 {
         /*PayloadTypeRegistry.playS2C().register(BvcPayload.TYPE, BvcPayload.CODEC);
         PayloadTypeRegistry.playC2S().register(BvcPayload.TYPE, BvcPayload.CODEC);
+        *///?}
+
+        //? if >=1.20.5 {
         BvcModClient client = BvcModClient.init("fabric", ClientPlayNetworking::send);
         ClientPlayNetworking.registerGlobalReceiver(BvcPayload.TYPE, (payload, context) -> client.onPayload(payload));
-        *///?} else {
+        //?} else {
         /*BvcModClient client = BvcModClient.init("fabric", payload -> {
             FriendlyByteBuf buf = PacketByteBufs.create();
             payload.write(buf);
@@ -54,18 +55,23 @@ public final class BvcFabric implements ClientModInitializer {
         });
         *///?}
 
-        //? if >=26 {
-        KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(BvcModClient.MOD_ID, "main"));
-        for (KeyMapping key : client.createKeys(category)) {
-            KeyMappingHelper.registerKeyMapping(key);
-        }
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(BvcModClient.MOD_ID, "hud"),
-                (graphics, delta) -> client.hud().render(graphics));
+        //? if >=1.21.9 {
+        KeyMapping[] keys = client.createKeys(KeyMapping.Category.register(BvcModClient.id("main")));
         //?} else {
-        /*for (KeyMapping key : client.createKeys(BvcModClient.KEY_CATEGORY)) {
-            KeyBindingHelper.registerKeyBinding(key);
+        /*KeyMapping[] keys = client.createKeys(BvcModClient.KEY_CATEGORY);
+        *///?}
+        for (KeyMapping key : keys) {
+            //? if >=26 {
+            KeyMappingHelper.registerKeyMapping(key);
+            //?} else {
+            /*KeyBindingHelper.registerKeyBinding(key);
+            *///?}
         }
-        HudRenderCallback.EVENT.register((graphics, delta) -> client.hud().render(graphics));
+
+        //? if >=1.21.6 {
+        HudElementRegistry.addLast(BvcModClient.id("hud"), (graphics, delta) -> client.hud().render(graphics));
+        //?} else {
+        /*HudRenderCallback.EVENT.register((graphics, delta) -> client.hud().render(graphics));
         *///?}
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> client.onJoin(handler.getConnection()));
