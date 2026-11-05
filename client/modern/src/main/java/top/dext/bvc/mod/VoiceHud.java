@@ -181,7 +181,7 @@ public final class VoiceHud {
 
     static MutableComponent literal(String text) {
         //? if >=1.19 {
-        return literal(text);
+        return Component.literal(text);
         //?} else {
         /*return new TextComponent(text);
         *///?}
@@ -189,7 +189,7 @@ public final class VoiceHud {
 
     static MutableComponent tr(String key, Object... args) {
         //? if >=1.19 {
-        return tr(key, args);
+        return Component.translatable(key, args);
         //?} else {
         /*return new TranslatableComponent(key, args);
         *///?}

@@ -204,7 +204,7 @@ public final class BvcModClient {
         return colon > 0 && value.indexOf(':') == colon ? value.substring(0, colon) : value;
     }
 
-    private static String modVersion() {
+    private static String readModVersion() {
         Properties properties = new Properties();
         try (InputStream in = BvcModClient.class.getResourceAsStream("/bvc-mod.properties")) {
             if (in != null) {
@@ -217,7 +217,7 @@ public final class BvcModClient {
     }
 
     private final class Platform implements ClientPlatform {
-        private final String version = modVersion();
+        private final String version = readModVersion();
         private final ClientLogger logger = new ClientLogger() {
             @Override
             public void info(String message) {
