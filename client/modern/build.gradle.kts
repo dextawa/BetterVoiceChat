@@ -26,6 +26,9 @@ repositories {
     maven("https://maven.minecraftforge.net/")
 }
 
+// Libraries copied into the Forge / NeoForge mod jar (resolved with their dependencies).
+val bundled = configurations.create("bundled") { isTransitive = true }
+
 dependencies {
     "minecraft"("com.mojang:minecraft:$minecraftVersion")
     // Remapped builds must pull loader artifacts through the mod* configurations.
@@ -42,11 +45,20 @@ dependencies {
         "forge" -> "forge"("net.minecraftforge:forge:${prop("deps.forge")}")
     }
 
-    // Voice engine, protocol and Opus codec, nested into the mod jar.
+    // Voice engine, protocol and Opus codec.
     "implementation"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
-    "include"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
-    "include"("top.dext.bvc:protocol:${prop("mod.version")}")
-    "include"("io.github.jaredmdobson:concentus:1.0.2")
+    if (loader == "fabric") {
+        // Fabric loads nested jars reliably, in dev and in production.
+        "include"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+        "include"("top.dext.bvc:protocol:${prop("mod.version")}")
+        "include"("io.github.jaredmdobson:concentus:1.0.2")
+    } else {
+        // Forge 1.16.5 has no jar-in-jar, and FML's dev runs do not put nested jars on the mod
+        // classpath: copy the classes into the mod jar instead (see the jar task), and give dev
+        // runs the libraries directly.
+        "bundled"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+        "forgeRuntimeLibrary"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+    }
 }
 
 // Only JDK 21 and 25 are needed on the build machine: Java 17 targets compile with --release 17.
@@ -59,7 +71,14 @@ tasks.withType<JavaCompile>().configureEach {
 
 // Dev client: `-Pbvc.quickplay=host:port` joins that server on start; `-Pbvc.user=Name` sets the offline name.
 loom.runs.named("client") {
-    findProperty("bvc.quickplay")?.let { programArgs("--quickPlayMultiplayer", it.toString()) }
+    findProperty("bvc.quickplay")?.toString()?.let {
+        if (stonecutter.eval(minecraftVersion, ">=1.20")) {
+            programArgs("--quickPlayMultiplayer", it)
+        } else {
+            // Before 1.20 the client only knows --server / --port.
+            programArgs("--server", it.substringBeforeLast(':'), "--port", it.substringAfterLast(':'))
+        }
+    }
     findProperty("bvc.user")?.let { programArgs("--username", it.toString()) }
 }
 
@@ -81,7 +100,10 @@ tasks.named<ProcessResources>("processResources") {
         "version" to project.version.toString(),
         "minecraft" to minecraftVersion,
         "fabricRange" to ">=$low <=$high",
-        "forgeRange" to "[$low,$high]",
+        // Maven ranges reject identical boundaries: a single version is written "[x]".
+        // Fabric API's mod id was "fabric" before 1.17.
+        "fabricApiId" to if (stonecutter.eval(minecraftVersion, "<1.17")) "fabric" else "fabric-api",
+        "forgeRange" to if (low == high) "[$low]" else "[$low,$high]",
     )
     inputs.properties(props)
     filesMatching(listOf("fabric.mod.json", "META-INF/neoforge.mods.toml", "bvc-mod.properties")) { expand(props) }
@@ -107,4 +129,9 @@ tasks.named<ProcessResources>("processResources") {
 
 tasks.named<Jar>("jar") {
     from(rootProject.file("../../LICENSE")) { rename { "LICENSE_BetterVoiceChat" } }
+    // Concentus is BSD-licensed; its classes keep their own package, so no relocation is needed.
+    from(provider { bundled.map { zipTree(it) } }) {
+        exclude("META-INF/MANIFEST.MF", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "module-info.class")
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

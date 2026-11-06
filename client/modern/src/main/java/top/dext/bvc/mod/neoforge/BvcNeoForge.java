@@ -8,6 +8,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.fml.loading.FMLPaths;
 import top.dext.bvc.mod.BvcModClient;
 import top.dext.bvc.mod.BvcPayload;
 //? if >=1.20.5 {
@@ -22,6 +23,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
 *///?}
 //? if >=1.21.6 {
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
 //?} else {
 /*import net.neoforged.neoforge.network.PacketDistributor;
 *///?}
@@ -44,20 +46,28 @@ public final class BvcNeoForge {
         *///?}
 
         //? if >=1.21.6 {
-        BvcModClient client = BvcModClient.init("neoforge", payload -> ClientPacketDistributor.sendToServer(payload));
+        BvcModClient client = BvcModClient.init("neoforge", FMLPaths.CONFIGDIR.get(), payload -> ClientPacketDistributor.sendToServer(payload));
         //?} else if >=1.20.5 {
-        /*BvcModClient client = BvcModClient.init("neoforge", payload -> PacketDistributor.sendToServer(payload));
+        /*BvcModClient client = BvcModClient.init("neoforge", FMLPaths.CONFIGDIR.get(), payload -> PacketDistributor.sendToServer(payload));
         *///?} else {
-        /*BvcModClient client = BvcModClient.init("neoforge", payload -> PacketDistributor.SERVER.noArg().send(payload));
+        /*BvcModClient client = BvcModClient.init("neoforge", FMLPaths.CONFIGDIR.get(), payload -> PacketDistributor.SERVER.noArg().send(payload));
         *///?}
 
-        //? if >=1.20.5 {
+        //? if >=1.21.6 {
+        // Since 1.21.6 the clientbound handler is registered separately, on the client side only.
         modBus.addListener((RegisterPayloadHandlersEvent event) -> event.registrar("1")
                 // optional: servers without BVC (and vanilla servers) must still accept us
                 .optional()
+                .playBidirectional(BvcPayload.TYPE, BvcPayload.CODEC, (payload, context) -> { }));
+        modBus.addListener((RegisterClientPayloadHandlersEvent event) ->
+                event.register(BvcPayload.TYPE, (payload, context) -> client.onPayload(payload)));
+        //?} else if >=1.20.5 {
+        /*modBus.addListener((RegisterPayloadHandlersEvent event) -> event.registrar("1")
+                // optional: servers without BVC (and vanilla servers) must still accept us
+                .optional()
                 .playBidirectional(BvcPayload.TYPE, BvcPayload.CODEC, (payload, context) -> client.onPayload(payload)));
-        //?} else {
-        /*modBus.addListener((RegisterPayloadHandlerEvent event) -> event.registrar("1")
+        *///?} else {
+        /*modBus.addListener((RegisterPayloadHandlerEvent event) -> event.registrar("bvc").versioned("1")
                 // optional: servers without BVC (and vanilla servers) must still accept us
                 .optional()
                 // handlers run on the network thread in 20.4

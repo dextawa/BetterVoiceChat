@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.KeyMapping;
+import net.fabricmc.loader.api.FabricLoader;
 import top.dext.bvc.mod.BvcModClient;
 import top.dext.bvc.mod.BvcPayload;
 //? if >=26 {
@@ -40,10 +41,10 @@ public final class BvcFabric implements ClientModInitializer {
         *///?}
 
         //? if >=1.20.5 {
-        BvcModClient client = BvcModClient.init("fabric", ClientPlayNetworking::send);
+        BvcModClient client = BvcModClient.init("fabric", FabricLoader.getInstance().getConfigDir(), ClientPlayNetworking::send);
         ClientPlayNetworking.registerGlobalReceiver(BvcPayload.TYPE, (payload, context) -> client.onPayload(payload));
         //?} else {
-        /*BvcModClient client = BvcModClient.init("fabric", payload -> {
+        /*BvcModClient client = BvcModClient.init("fabric", FabricLoader.getInstance().getConfigDir(), payload -> {
             FriendlyByteBuf buf = PacketByteBufs.create();
             payload.write(buf);
             ClientPlayNetworking.send(BvcPayload.ID, buf);

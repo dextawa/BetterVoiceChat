@@ -66,10 +66,11 @@ public final class BvcModClient {
     public KeyMapping muteKey;
     public KeyMapping deafenKey;
 
-    private BvcModClient(String loader, Consumer<BvcPayload> sender) {
+    private BvcModClient(String loader, Path configDir, Consumer<BvcPayload> sender) {
         this.loader = loader;
         this.sender = sender;
-        Path config = Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("bettervoicechat.properties");
+        // Loaders construct mods before Minecraft exists, so the config dir comes from the loader.
+        Path config = configDir.resolve("bettervoicechat.properties");
         this.voice = new VoiceClient(new Platform(), ClientSettings.load(config), new JavaSoundDevices());
         this.hud = new VoiceHud(voice);
     }
@@ -93,9 +94,9 @@ public final class BvcModClient {
     *///?}
 
     /** Called once by the loader entry point. */
-    public static BvcModClient init(String loader, Consumer<BvcPayload> sender) {
+    public static BvcModClient init(String loader, Path configDir, Consumer<BvcPayload> sender) {
         if (instance == null) {
-            instance = new BvcModClient(loader, sender);
+            instance = new BvcModClient(loader, configDir, sender);
         }
         return instance;
     }

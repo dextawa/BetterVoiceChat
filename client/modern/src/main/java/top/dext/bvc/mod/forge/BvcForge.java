@@ -13,6 +13,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import io.netty.buffer.Unpooled;
+import net.minecraftforge.fml.loading.FMLPaths;
 import top.dext.bvc.mod.BvcModClient;
 import top.dext.bvc.mod.BvcPayload;
 //? if >=1.19 {
@@ -66,7 +67,7 @@ public final class BvcForge {
         if (FMLEnvironment.dist != Dist.CLIENT) {
             return; // client-only mod; nothing to do on a dedicated server
         }
-        BvcModClient client = BvcModClient.init("forge", payload -> {
+        BvcModClient client = BvcModClient.init("forge", FMLPaths.CONFIGDIR.get(), payload -> {
             FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer(payload.data().length));
             payload.write(buf);
             Minecraft.getInstance().getConnection().send(new ServerboundCustomPayloadPacket(BvcPayload.ID, buf));
