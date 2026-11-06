@@ -1,0 +1,14 @@
+[
+  {
+    "modid": "bettervoicechat",
+    "name": "BetterVoiceChat",
+    "description": "TCP voice chat for Minecraft networks. Server-decided voice zones, push-to-talk, mutes and reports.",
+    "version": "${version}",
+    "mcversion": "${minecraft}",
+    "authorList": ["dext.top"],
+    "credits": "Opus codec: Concentus (BSD)",
+    "url": "",
+    "logoFile": "",
+    "dependencies": []
+  }
+]
