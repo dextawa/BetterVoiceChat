@@ -88,6 +88,7 @@ loom.runs.named("client") {
         }
     }
     findProperty("bvc.user")?.let { programArgs("--username", it.toString()) }
+    if (findProperty("bvc.devSettings") != null) vmArgs("-Dbvc.devSettings=true")
 }
 
 // Each node only has its own loader on the classpath: compile only that loader's entry point.

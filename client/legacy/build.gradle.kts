@@ -64,6 +64,7 @@ subprojects {
             programArgs("--server", it.substringBeforeLast(':'), "--port", it.substringAfterLast(':'))
         }
         findProperty("bvc.user")?.let { programArgs("--username", it.toString()) }
+        if (findProperty("bvc.devSettings") != null) vmArgs("-Dbvc.devSettings=true")
     }
 
     tasks.named<ProcessResources>("processResources") {

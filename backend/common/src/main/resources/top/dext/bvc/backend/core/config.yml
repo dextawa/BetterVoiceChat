@@ -42,3 +42,6 @@ priority-levels: [10, 50, 100, 200]
 update-interval-ticks: 2
 # 每隔多少秒向 BC 全量重发一次（丢包或重启后自动恢复）
 full-resync-seconds: 5
+
+# 和 BC 的共享密钥，必须和 BC 配置里的 security.backend-secret 相同。留空 = 不校验
+backend-secret: ""

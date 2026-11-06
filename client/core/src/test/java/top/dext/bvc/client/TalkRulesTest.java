@@ -82,4 +82,20 @@ class TalkRulesTest {
         assertFalse(loaded.isPlayerMuted(loud));
         assertEquals(1f, loaded.playerVolume(UUID.randomUUID()));
     }
+
+    @Test
+    void deviceNamesFromOldJavaAreRepairedForDisplay() throws Exception {
+        String gbk = "主声音捕获驱动程序"; // 主声音捕获驱动程序
+        byte[] bytes = gbk.getBytes("GBK");
+        String mangled = new String(bytes, 0, 15, java.nio.charset.StandardCharsets.ISO_8859_1); // cut mid-character
+        String old = System.getProperty("sun.jnu.encoding");
+        System.setProperty("sun.jnu.encoding", "GBK");
+        try {
+            org.junit.jupiter.api.Assertions.assertEquals("主声音捕获驱动", SettingsModel.displayName(mangled));
+            org.junit.jupiter.api.Assertions.assertEquals("Realtek Audio", SettingsModel.displayName("Realtek Audio"));
+            org.junit.jupiter.api.Assertions.assertEquals(gbk, SettingsModel.displayName(gbk));
+        } finally {
+            System.setProperty("sun.jnu.encoding", old);
+        }
+    }
 }

@@ -11,6 +11,7 @@ import java.util.function.BiConsumer;
 
 import top.dext.bvc.protocol.BvcProtocol;
 import top.dext.bvc.protocol.ProtocolException;
+import top.dext.bvc.protocol.crypto.BvcCrypto;
 import top.dext.bvc.protocol.packet.BackendToProxy;
 import top.dext.bvc.protocol.packet.Packet;
 import top.dext.bvc.protocol.packet.ProxyToBackend;
@@ -46,6 +47,10 @@ public final class ProxyLink {
     /** Told (uuid, hasVoice) whenever a player's voice state changes. */
     private final List<BiConsumer<UUID, Boolean>> voiceListeners = new CopyOnWriteArrayList<BiConsumer<UUID, Boolean>>();
 
+    /** Shared secret from config.yml; empty = trust any proxy (as before). */
+    private volatile String secret = "";
+    private final AtomicBoolean secretWarned = new AtomicBoolean();
+
     private volatile long proxyInstance;
     private volatile boolean proxySeen;
     private volatile String proxyVersion = "";
@@ -57,6 +62,10 @@ public final class ProxyLink {
     }
 
     // ------------------------------------------------------------------ players
+
+    public void setSecret(String secret) {
+        this.secret = secret == null ? "" : secret;
+    }
 
     public void onJoin(BackendPlayer player) {
         online.put(player.uuid(), player);
@@ -129,6 +138,9 @@ public final class ProxyLink {
             return;
         }
         online.put(player.uuid(), player);
+        if (!secret.isEmpty() && !(packet instanceof ProxyToBackend.ProxyHello) && !proxySeen) {
+            return; // nothing from a proxy that has not proved the secret
+        }
         packet.handle(new Incoming(player));
     }
 
@@ -150,6 +162,14 @@ public final class ProxyLink {
                 }
                 return;
             }
+            String key = secret;
+            if (!key.isEmpty() && !BvcCrypto.verifyLinkProof(key, "proxy", packet.instanceId, 0, packet.proof)) {
+                if (secretWarned.compareAndSet(false, true)) {
+                    logger.warn("Ignoring a BVC proxy that does not know the shared secret (backend-secret)."
+                            + " Set the same value on the proxy, or someone is connecting around it.");
+                }
+                return;
+            }
             proxyVersion = packet.pluginVersion;
             synchronized (ProxyLink.this) {
                 if (proxySeen && proxyInstance == packet.instanceId) {
@@ -158,8 +178,9 @@ public final class ProxyLink {
                 proxySeen = true;
                 proxyInstance = packet.instanceId;
             }
+            byte[] proof = key.isEmpty() ? new byte[0] : BvcCrypto.linkProof(key, "backend", packet.instanceId, instanceId);
             send(via, new BackendToProxy.BackendHello(BvcProtocol.VERSION, pluginVersion,
-                    software, instanceId));
+                    software, instanceId, proof));
             resyncRequested.set(true);
             logger.info("Linked with BetterVoiceChat proxy " + packet.pluginVersion);
         }

@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import top.dext.bvc.client.audio.AudioDevices;
 import top.dext.bvc.client.audio.OpusCodec;
 import top.dext.bvc.client.audio.Positions;
+import top.dext.bvc.client.audio.MicrophoneTest;
 import top.dext.bvc.client.audio.RemoteSpeaker;
 import top.dext.bvc.client.audio.VoiceActivity;
 import top.dext.bvc.client.audio.VoiceMixer;
@@ -84,6 +85,36 @@ public final class VoiceClient {
     private Thread captureThread;
     private Thread playbackThread;
     private volatile boolean running;
+
+    private MicrophoneTest microphoneTest;
+
+    /**
+     * The settings screen's microphone test. It is fed by the normal capture below, never opens
+     * the microphone itself, so voice keeps working while it runs.
+     */
+    public synchronized MicrophoneTest microphoneTest() {
+        if (microphoneTest == null) {
+            microphoneTest = new MicrophoneTest(devices);
+        }
+        return microphoneTest;
+    }
+
+    /** Starts the test; capture also runs without a server while it is on (title screen, singleplayer). */
+    public void startMicrophoneTest(boolean loopback) {
+        microphoneTest().start(settings.outputDevice(), loopback);
+        startAudio();
+    }
+
+    public void stopMicrophoneTest() {
+        if (microphoneTest != null) {
+            microphoneTest.stop();
+        }
+    }
+
+    private boolean testing() {
+        MicrophoneTest test = microphoneTest;
+        return test != null && test.isRunning();
+    }
 
     public VoiceClient(ClientPlatform platform, ClientSettings settings, AudioDevices devices) {
         this.platform = platform;
@@ -183,11 +214,29 @@ public final class VoiceClient {
     }
 
     public void shutdown() {
+        stopMicrophoneTest();
         synchronized (this) {
             resetConnection();
         }
         stopAudio();
         scheduler.shutdownNow();
+    }
+
+    /** Everyone heard since joining who has a name and UUID, for per-player volume. */
+    public List<RemoteSpeaker> knownSpeakers() {
+        List<RemoteSpeaker> list = new ArrayList<RemoteSpeaker>();
+        for (RemoteSpeaker speaker : speakers.values()) {
+            if (speaker.uuid() != null) {
+                list.add(speaker);
+            }
+        }
+        Collections.sort(list, new Comparator<RemoteSpeaker>() {
+            @Override
+            public int compare(RemoteSpeaker a, RemoteSpeaker b) {
+                return String.valueOf(a.name()).compareToIgnoreCase(String.valueOf(b.name()));
+            }
+        });
+        return list;
     }
 
     public ClientStatus status() {
@@ -569,7 +618,8 @@ public final class VoiceClient {
         int sequence = 0;
         boolean wasTalking = false;
         while (running) {
-            if (phase != ClientStatus.Phase.CONNECTED) {
+            // The microphone is open only while voice is connected or the player is testing it.
+            if (phase != ClientStatus.Phase.CONNECTED && !testing()) {
                 if (wasTalking) {
                     wasTalking = false;
                     talking = false;
@@ -586,15 +636,26 @@ public final class VoiceClient {
                     logger.warn("Cannot open the microphone: " + e.getMessage());
                 }
                 inputAvailable = false;
-                sleep(DEVICE_RETRY_MILLIS);
+                MicrophoneTest test = microphoneTest;
+                if (test != null) {
+                    test.inputFailed(e.getMessage());
+                }
+                sleep(testing() ? 1000 : DEVICE_RETRY_MILLIS);
                 continue;
             }
             try {
-                while (running && phase == ClientStatus.Phase.CONNECTED && !Thread.currentThread().isInterrupted()) {
+                while (running && (phase == ClientStatus.Phase.CONNECTED || testing()) && !Thread.currentThread().isInterrupted()) {
                     input.read(frame);
                     applyGain(frame, settings.inputGain());
                     float level = VoiceActivity.levelDb(frame);
                     microphoneLevel = level;
+                    MicrophoneTest test = microphoneTest;
+                    if (test != null) {
+                        test.feed(frame, level);
+                    }
+                    if (phase != ClientStatus.Phase.CONNECTED) {
+                        continue; // testing without a server: nothing to send
+                    }
                     boolean detected = activity.update(level, settings.voiceThresholdDb());
                     ProxyToClient.VoiceState state = voice;
                     int decision = decide(state, mute, microphoneMuted, effectiveActivation(), talkKeyHeld, toggledOn,

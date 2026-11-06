@@ -62,7 +62,10 @@ class ServerApiTest {
 
         @Override
         public void sendPluginMessage(String channel, byte[] data) {
+            sent.add(data);
         }
+
+        final List<byte[]> sent = new java.util.concurrent.CopyOnWriteArrayList<>();
     }
 
     private void start() {
@@ -155,6 +158,28 @@ class ServerApiTest {
         assertTrue(api.membersOf("arena").isEmpty());
         assertTrue(api.roomOf(a.uuid).isEmpty());
         assertEquals("red", api.groupOf(a.uuid).orElseThrow(), "the group survives the room");
+    }
+
+    @Test
+    void sharedSecretRejectsAnUnknownProxy() throws Exception {
+        java.nio.file.Files.writeString(data.resolve("config.yml"), "backend-secret: s3cret");
+        start();
+        Player a = new Player("A");
+        backend.onJoin(a);
+        backend.onProxyMessage(a, ProxyToBackend.REGISTRY.encode(new ProxyToBackend.ProxyHello(
+                top.dext.bvc.protocol.BvcProtocol.VERSION, "x", 5, top.dext.bvc.protocol.crypto.BvcCrypto.linkProof("wrong", "proxy", 5, 0))));
+        bind(a, 1, true);
+        assertTrue(a.sent.isEmpty(), "no BackendHello to a proxy without the secret");
+        assertTrue(!BvcServer.get().hasVoice(a.uuid), "bindings from it are ignored");
+
+        backend.onProxyMessage(a, ProxyToBackend.REGISTRY.encode(new ProxyToBackend.ProxyHello(
+                top.dext.bvc.protocol.BvcProtocol.VERSION, "x", 6, top.dext.bvc.protocol.crypto.BvcCrypto.linkProof("s3cret", "proxy", 6, 0))));
+        assertEquals(1, a.sent.size());
+        top.dext.bvc.protocol.packet.BackendToProxy.BackendHello hello = (top.dext.bvc.protocol.packet.BackendToProxy.BackendHello)
+                top.dext.bvc.protocol.packet.BackendToProxy.REGISTRY.decode(a.sent.get(0));
+        assertTrue(top.dext.bvc.protocol.crypto.BvcCrypto.verifyLinkProof("s3cret", "backend", 6, hello.instanceId, hello.proof));
+        bind(a, 1, true);
+        assertTrue(BvcServer.get().hasVoice(a.uuid));
     }
 
     @Test

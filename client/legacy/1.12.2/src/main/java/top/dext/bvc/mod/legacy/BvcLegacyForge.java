@@ -45,6 +45,9 @@ public final class BvcLegacyForge implements LegacyVoice.Game {
     private KeyBinding broadcastKey;
     private KeyBinding muteKey;
     private KeyBinding deafenKey;
+    private KeyBinding settingsKey;
+    private boolean devSettingsPending = Boolean.getBoolean("bvc.devSettings");
+    private int devSettingsTicks;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
@@ -57,6 +60,7 @@ public final class BvcLegacyForge implements LegacyVoice.Game {
         broadcastKey = key("key.bettervoicechat.broadcast", Keyboard.KEY_B);
         muteKey = key("key.bettervoicechat.mute", Keyboard.KEY_M);
         deafenKey = key("key.bettervoicechat.deafen", Keyboard.KEY_N);
+        settingsKey = key("key.bettervoicechat.settings", Keyboard.KEY_K);
 
         MinecraftForge.EVENT_BUS.register(this);
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
@@ -95,6 +99,13 @@ public final class BvcLegacyForge implements LegacyVoice.Game {
                 mc.getCurrentServerData() == null ? "" : mc.getCurrentServerData().serverIP);
 
         voice.onKeys(talkKey.isKeyDown(), broadcastKey.isKeyDown(), presses(muteKey), presses(deafenKey));
+        boolean devOpen = devSettingsPending && voice.voice().status().isConnected() && ++devSettingsTicks > 40;
+        if (devOpen) {
+            devSettingsPending = false; // dev runs only: -Dbvc.devSettings
+        }
+        if ((devOpen || presses(settingsKey) > 0) && mc.currentScreen == null) {
+            mc.displayGuiScreen(new LegacySettingsScreen(voice.voice()));
+        }
 
         if (mc.player == null || mc.world == null) {
             voice.clearPositions();

@@ -3,10 +3,14 @@ package top.dext.bvc.proxy.backend;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import top.dext.bvc.api.MuteScope;
 import top.dext.bvc.protocol.BvcProtocol;
 import top.dext.bvc.protocol.ProtocolException;
+import top.dext.bvc.protocol.crypto.BvcCrypto;
 import top.dext.bvc.protocol.packet.BackendToProxy;
 import top.dext.bvc.protocol.packet.Packet;
 import top.dext.bvc.protocol.packet.ProxyToBackend;
@@ -34,11 +38,22 @@ public final class BackendBridge {
     private final MuteManager mutes;
     private final BvcLogger logger;
     private final String pluginVersion;
+    /** Shared secret ({@code security.backend-secret}); empty = sub-servers are trusted as before. */
+    private final Supplier<String> secret;
+    /** Sub-servers whose BackendHello carried a valid proof (only used with a secret). */
+    private final Set<String> verified = ConcurrentHashMap.newKeySet();
+    private final Set<String> warnedUnverified = ConcurrentHashMap.newKeySet();
     /** Random per proxy start; tells backends when the proxy forgot their tables. */
     private final long instanceId = new SecureRandom().nextLong();
 
     public BackendBridge(SessionManager sessions, RouteRegistry routes, VoiceRouter router, MuteManager mutes,
                          BvcLogger logger, String pluginVersion) {
+        this(sessions, routes, router, mutes, logger, pluginVersion, () -> "");
+    }
+
+    public BackendBridge(SessionManager sessions, RouteRegistry routes, VoiceRouter router, MuteManager mutes,
+                         BvcLogger logger, String pluginVersion, Supplier<String> secret) {
+        this.secret = secret;
         this.sessions = sessions;
         this.routes = routes;
         this.router = router;
@@ -56,14 +71,19 @@ public final class BackendBridge {
             logger.warn("Bad bvc:server message from " + server + ": " + e.getMessage());
             return;
         }
+        if (!(packet instanceof BackendToProxy.BackendHello) && !secret.get().isEmpty() && !verified.contains(server)) {
+            return; // tables only from a sub-server that proved it knows the secret
+        }
         packet.handle(new Handler(server, via));
     }
 
     /** The player just finished connecting to {@code server}. */
     public void onPlayerConnected(VoiceSession session, String server) {
         PlatformPlayer player = session.player();
+        String key = secret.get();
+        byte[] proof = key.isEmpty() ? new byte[0] : BvcCrypto.linkProof(key, "proxy", instanceId, 0);
         player.sendToBackend(BvcProtocol.CHANNEL_PROXY,
-                ProxyToBackend.REGISTRY.encode(new ProxyToBackend.ProxyHello(BvcProtocol.VERSION, pluginVersion, instanceId)));
+                ProxyToBackend.REGISTRY.encode(new ProxyToBackend.ProxyHello(BvcProtocol.VERSION, pluginVersion, instanceId, proof)));
         sendBind(player, List.of(session));
     }
 
@@ -112,6 +132,19 @@ public final class BackendBridge {
                 logger.warn("Sub-server " + server + " runs BVC protocol " + packet.protocolVersion
                         + " but the proxy speaks " + BvcProtocol.VERSION + "; update the plugin there");
                 return;
+            }
+            String key = secret.get();
+            if (!key.isEmpty()) {
+                if (!BvcCrypto.verifyLinkProof(key, "backend", instanceId, packet.instanceId, packet.proof)) {
+                    if (verified.remove(server) || !warnedUnverified.contains(server)) {
+                        warnedUnverified.add(server);
+                        logger.warn("Sub-server " + server + " did not prove the shared secret (security.backend-secret);"
+                                + " its voice tables are ignored. Set the same secret in its config.yml.");
+                    }
+                    return;
+                }
+                verified.add(server);
+                warnedUnverified.remove(server);
             }
             ServerRoutes table = routes.getOrCreate(server);
             if (table.onBackendHello(packet.pluginVersion, packet.software, packet.instanceId)) {

@@ -32,6 +32,7 @@ public final class BvcBackend {
         this.platform = platform;
         BackendSettings settings = loadSettings();
         this.link = new ProxyLink(platform.log(), platform.pluginVersion(), platform.software());
+        link.setSecret(settings.backendSecret);
         this.engine = new VoiceEngine(link, platform.log(), settings);
         this.command = new BvcsCommand(this);
     }
@@ -51,6 +52,7 @@ public final class BvcBackend {
     public void reload() {
         BackendSettings settings = loadSettings();
         int oldInterval = engine.settings().intervalTicks;
+        link.setSecret(settings.backendSecret);
         engine.apply(settings);
         if (settings.intervalTicks != oldInterval) {
             engine.stop();

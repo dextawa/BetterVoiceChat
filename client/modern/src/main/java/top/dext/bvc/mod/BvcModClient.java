@@ -65,6 +65,9 @@ public final class BvcModClient {
     public KeyMapping broadcastKey;
     public KeyMapping muteKey;
     public KeyMapping deafenKey;
+    public KeyMapping settingsKey;
+    private boolean devSettingsPending = Boolean.getBoolean("bvc.devSettings");
+    private int devSettingsTicks;
 
     private BvcModClient(String loader, Path configDir, Consumer<BvcPayload> sender) {
         this.loader = loader;
@@ -101,6 +104,10 @@ public final class BvcModClient {
         return instance;
     }
 
+    static void log(String message) {
+        LOGGER.info(message);
+    }
+
     public static BvcModClient get() {
         return instance;
     }
@@ -115,9 +122,9 @@ public final class BvcModClient {
 
     // Default keys V / B / M / N (InputConstants has no KEY_* constants before 1.17).
     //? if >=1.17 {
-    private static final int KEY_V = InputConstants.KEY_V, KEY_B = InputConstants.KEY_B, KEY_M = InputConstants.KEY_M, KEY_N = InputConstants.KEY_N;
+    private static final int KEY_V = InputConstants.KEY_V, KEY_B = InputConstants.KEY_B, KEY_M = InputConstants.KEY_M, KEY_N = InputConstants.KEY_N, KEY_K = InputConstants.KEY_K;
     //?} else {
-    /*private static final int KEY_V = GLFW.GLFW_KEY_V, KEY_B = GLFW.GLFW_KEY_B, KEY_M = GLFW.GLFW_KEY_M, KEY_N = GLFW.GLFW_KEY_N;
+    /*private static final int KEY_V = GLFW.GLFW_KEY_V, KEY_B = GLFW.GLFW_KEY_B, KEY_M = GLFW.GLFW_KEY_M, KEY_N = GLFW.GLFW_KEY_N, KEY_K = GLFW.GLFW_KEY_K;
     *///?}
 
     /** Creates the key mappings; the entry point registers them with its loader. */
@@ -130,7 +137,8 @@ public final class BvcModClient {
         broadcastKey = new KeyMapping("key.bettervoicechat.broadcast", KEY_B, category);
         muteKey = new KeyMapping("key.bettervoicechat.mute", KEY_M, category);
         deafenKey = new KeyMapping("key.bettervoicechat.deafen", KEY_N, category);
-        return new KeyMapping[] {talkKey, broadcastKey, muteKey, deafenKey};
+        settingsKey = new KeyMapping("key.bettervoicechat.settings", KEY_K, category);
+        return new KeyMapping[] {talkKey, broadcastKey, muteKey, deafenKey, settingsKey};
     }
 
     // ------------------------------------------------------------------ events from the loader
@@ -169,6 +177,26 @@ public final class BvcModClient {
         }
         while (deafenKey.consumeClick()) {
             voice.toggleDeafened();
+        }
+        // Dev runs: -Dbvc.devSettings opens the screen once voice is connected (screenshot tests).
+        boolean devOpen = devSettingsPending && voice.status().isConnected() && ++devSettingsTicks > 40;
+        if (devOpen) {
+            devSettingsPending = false;
+        }
+        while (devOpen || settingsKey.consumeClick()) {
+            devOpen = false;
+            //? if >=26.2 {
+            boolean noScreen = mc.gui.screen() == null;
+            //?} else {
+            /*boolean noScreen = mc.screen == null;
+            *///?}
+            if (noScreen) {
+                //? if >=26.2 {
+                mc.setScreenAndShow(new VoiceSettingsScreen(null, voice));
+                //?} else {
+                /*mc.setScreen(new VoiceSettingsScreen(null, voice));
+                *///?}
+            }
         }
 
         if (mc.player == null || mc.level == null) {

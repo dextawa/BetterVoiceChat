@@ -23,8 +23,12 @@ public final class BackendSettings {
     public final List<Integer> priorityLevels;
     public final int intervalTicks;
     public final int fullResyncSeconds;
+    /** Shared secret with the proxy; empty = not checked. */
+    public final String backendSecret;
 
-    private BackendSettings(VoiceRules rules, List<Integer> priorityLevels, int intervalTicks, int fullResyncSeconds) {
+    private BackendSettings(VoiceRules rules, List<Integer> priorityLevels, int intervalTicks, int fullResyncSeconds,
+                            String backendSecret) {
+        this.backendSecret = backendSecret;
         this.rules = rules;
         this.priorityLevels = priorityLevels;
         this.intervalTicks = intervalTicks;
@@ -62,8 +66,9 @@ public final class BackendSettings {
 
         int interval = Math.max(1, Math.min(40, integer(config.get("update-interval-ticks"), 2)));
         int resync = Math.max(1, Math.min(300, integer(config.get("full-resync-seconds"), 5)));
+        String secret = string(config, "backend-secret");
         return new BackendSettings(new VoiceRules(defaultZone, worlds, spectators, scoreboardTeams),
-                Collections.unmodifiableList(levels), interval, resync);
+                Collections.unmodifiableList(levels), interval, resync, secret == null ? "" : secret.trim());
     }
 
     /** Missing keys inherit from {@code parent}, so a world can override only its mode. */

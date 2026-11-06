@@ -34,7 +34,24 @@ public record BvcConfig(
         FallbackMode serversWithoutPlugin,
         Recording recording,
         Reports reports,
-        Web web) {
+        Web web,
+        Storage storage,
+        String backendSecret) {
+
+    public enum StorageType {
+        H2,
+        MYSQL,
+        MARIADB
+    }
+
+    /** Where mutes, reports, the recording index and panel accounts are stored. */
+    public record Storage(StorageType type, String host, int port, String database, String user, String password,
+                          String parameters) {
+        @Override
+        public String toString() {
+            return "Storage[" + type + " " + host + ":" + port + "/" + database + " user=" + user + "]"; // never the password
+        }
+    }
 
     /** Rolling recording of everything that was forwarded. */
     public record Recording(boolean enabled, long maxBytes, int segmentMinutes) {
@@ -128,7 +145,16 @@ public record BvcConfig(
                         node.string("web.bind", "127.0.0.1"),
                         clamp(node.integer("web.port", 8790), 0, 65535),
                         stripSlash(node.string("web.public-url", "")),
-                        clamp(node.integer("web.session-hours", 12), 1, 24 * 30)));
+                        clamp(node.integer("web.session-hours", 12), 1, 24 * 30)),
+                new Storage(
+                        node.enumValue("storage.type", StorageType.class, StorageType.H2),
+                        node.string("storage.host", "127.0.0.1"),
+                        clamp(node.integer("storage.port", 3306), 1, 65535),
+                        node.string("storage.database", "bettervoicechat"),
+                        node.string("storage.user", "bvc"),
+                        node.string("storage.password", ""),
+                        node.string("storage.parameters", "")),
+                node.string("security.backend-secret", "").trim());
     }
 
     private static List<String> aliases(List<Object> values) {

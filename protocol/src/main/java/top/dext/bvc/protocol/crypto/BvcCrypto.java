@@ -113,6 +113,21 @@ public final class BvcCrypto {
         return out;
     }
 
+    /**
+     * Proof that the sender of a {@code ProxyHello} / {@code BackendHello} knows the shared
+     * secret configured on the proxy and its sub-servers. {@code role} is "proxy" or "backend";
+     * binding it to the instance ids stops a captured proof from being reused elsewhere.
+     */
+    public static byte[] linkProof(String secret, String role, long proxyInstance, long backendInstance) {
+        byte[] key = secret.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] data = (role + "|" + proxyInstance + "|" + backendInstance).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return hmac(key, data);
+    }
+
+    public static boolean verifyLinkProof(String secret, String role, long proxyInstance, long backendInstance, byte[] proof) {
+        return java.security.MessageDigest.isEqual(linkProof(secret, role, proxyInstance, backendInstance), proof);
+    }
+
     static byte[] hmac(byte[] key, byte[] data) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

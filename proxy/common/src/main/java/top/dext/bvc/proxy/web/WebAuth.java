@@ -68,6 +68,7 @@ public final class WebAuth {
 
     private final Database database;
     private final SecureRandom random = new SecureRandom();
+    /** Cache of {@code bvc_web_sessions}, keyed by the cookie value. */
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     private final Map<String, LoginToken> loginTokens = new ConcurrentHashMap<>();
     /** Failed password logins per username, to slow down guessing. */
@@ -150,6 +151,10 @@ public final class WebAuth {
         String name = normalize(username);
         sessions.values().removeIf(session -> session.username().equals(name));
         return database.async(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM bvc_web_sessions WHERE username = ?")) {
+                statement.setString(1, name);
+                statement.executeUpdate();
+            }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM bvc_web_users WHERE username = ?")) {
                 statement.setString(1, name);
                 return statement.executeUpdate() > 0;
@@ -206,12 +211,19 @@ public final class WebAuth {
     }
 
     public Optional<String> sessionUser(String sessionId, long now) {
-        Session session = sessionId == null ? null : sessions.get(sessionId);
-        if (session == null) {
+        if (sessionId == null || sessionId.length() > 64) {
             return Optional.empty();
         }
+        Session session = sessions.get(sessionId);
+        if (session == null) {
+            session = loadSession(sessionId);
+            if (session == null) {
+                return Optional.empty();
+            }
+            sessions.put(sessionId, session);
+        }
         if (session.expiresAt() < now) {
-            sessions.remove(sessionId);
+            logout(sessionId);
             return Optional.empty();
         }
         return Optional.of(session.username());
@@ -220,17 +232,68 @@ public final class WebAuth {
     public void logout(String sessionId) {
         if (sessionId != null) {
             sessions.remove(sessionId);
+            String hash = sha256(sessionId);
+            database.async(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement("DELETE FROM bvc_web_sessions WHERE id_hash = ?")) {
+                    statement.setString(1, hash);
+                    statement.executeUpdate();
+                }
+                return null;
+            });
+        }
+    }
+
+    private Session loadSession(String sessionId) {
+        try {
+            return database.async(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT username, expires_at FROM bvc_web_sessions WHERE id_hash = ?")) {
+                    statement.setString(1, sha256(sessionId));
+                    try (ResultSet rs = statement.executeQuery()) {
+                        return rs.next() ? new Session(rs.getString(1), rs.getLong(2)) : null;
+                    }
+                }
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
     public void purge(long now) {
         sessions.values().removeIf(session -> session.expiresAt() < now);
         loginTokens.values().removeIf(token -> token.expiresAt() < now);
+        database.async(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM bvc_web_sessions WHERE expires_at < ?")) {
+                statement.setLong(1, now);
+                statement.executeUpdate();
+            }
+            return null;
+        });
     }
 
     private String newSession(String username, long now, long sessionMillis) {
         String id = randomToken();
-        sessions.put(id, new Session(username, now + sessionMillis));
+        Session session = new Session(username, now + sessionMillis);
+        sessions.put(id, session);
+        String hash = sha256(id);
+        database.async(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO bvc_web_sessions (id_hash, username, expires_at) VALUES (?, ?, ?)")) {
+                statement.setString(1, hash);
+                statement.setString(2, session.username());
+                statement.setLong(3, session.expiresAt());
+                statement.executeUpdate();
+            }
+            return null;
+        });
         return id;
     }
 

@@ -1,14 +1,20 @@
 package top.dext.bvc.proxy.storage;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -19,6 +25,10 @@ import java.util.concurrent.TimeoutException;
 /**
  * One JDBC connection used from a single dedicated thread, so callers never block network
  * threads and statements never race. Plenty for one proxy's mute and report traffic.
+ * <p>
+ * H2 is built in. MySQL / MariaDB use a JDBC driver jar the admin puts in the plugin's
+ * {@code lib/} folder; nothing is downloaded or bundled. A connection that went stale (server
+ * restart, {@code wait_timeout}) is replaced before the next statement.
  */
 public final class Database implements AutoCloseable {
 
@@ -27,11 +37,21 @@ public final class Database implements AutoCloseable {
         T apply(Connection connection) throws SQLException;
     }
 
-    private final Connection connection;
+    /** Opens a fresh connection; called again when the current one is no longer valid. */
+    @FunctionalInterface
+    private interface Connector {
+        Connection connect() throws SQLException;
+    }
+
+    private final Connector connector;
+    private final boolean mysql;
+    private Connection connection;
     private final ExecutorService executor;
 
-    private Database(Connection connection) {
-        this.connection = connection;
+    private Database(Connector connector, boolean mysql) throws SQLException {
+        this.connector = connector;
+        this.mysql = mysql;
+        this.connection = connector.connect();
         this.executor = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "BVC-Database");
             thread.setDaemon(true);
@@ -49,17 +69,69 @@ public final class Database implements AutoCloseable {
         String url = "jdbc:h2:file:" + directory.resolve("bvc").toAbsolutePath().toString().replace('\\', '/')
                 + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE";
         // Use the driver directly: DriverManager does not see drivers inside plugin class loaders.
-        Connection connection = new org.h2.Driver().connect(url, new Properties());
-        Database database = new Database(connection);
-        database.sync(Database::migrate);
+        Database database = new Database(() -> new org.h2.Driver().connect(url, new Properties()), false);
+        database.sync(database::migrate);
         return database;
+    }
+
+    /**
+     * MySQL or MariaDB. {@code libDirectory} holds the JDBC driver jar (mysql-connector-j or
+     * mariadb-java-client); a driver already on the classpath (e.g. BungeeCord's) works too.
+     */
+    public static Database openMySql(Path libDirectory, String host, int port, String database, String user, String password,
+                                     String extraParameters) throws SQLException {
+        Driver driver = findDriver(libDirectory);
+        boolean maria = driver.getClass().getName().startsWith("org.mariadb");
+        String url = "jdbc:" + (maria ? "mariadb" : "mysql") + "://" + host + ":" + port + "/" + database
+                + "?useUnicode=true&characterEncoding=utf8" + (extraParameters.isEmpty() ? "" : "&" + extraParameters);
+        Properties properties = new Properties();
+        properties.setProperty("user", user);
+        properties.setProperty("password", password);
+        Database db = new Database(() -> {
+            Connection connection = driver.connect(url, properties);
+            if (connection == null) {
+                throw new SQLException("The driver " + driver.getClass().getName() + " does not accept " + url);
+            }
+            return connection;
+        }, true);
+        db.sync(db::migrate);
+        return db;
+    }
+
+    private static Driver findDriver(Path libDirectory) throws SQLException {
+        List<URL> jars = new ArrayList<>();
+        if (Files.isDirectory(libDirectory)) {
+            try (DirectoryStream<Path> files = Files.newDirectoryStream(libDirectory, "*.jar")) {
+                for (Path jar : files) {
+                    jars.add(jar.toUri().toURL());
+                }
+            } catch (IOException e) {
+                throw new SQLException("Cannot read " + libDirectory, e);
+            }
+        }
+        ClassLoader loader = jars.isEmpty() ? Database.class.getClassLoader()
+                : new URLClassLoader(jars.toArray(new URL[0]), Database.class.getClassLoader());
+        for (String name : List.of("org.mariadb.jdbc.Driver", "com.mysql.cj.jdbc.Driver", "com.mysql.jdbc.Driver")) {
+            try {
+                return (Driver) Class.forName(name, true, loader).getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException | LinkageError ignored) {
+                // try the next one
+            }
+        }
+        for (Driver driver : ServiceLoader.load(Driver.class, loader)) {
+            if (!driver.getClass().getName().startsWith("org.h2")) {
+                return driver;
+            }
+        }
+        throw new SQLException("No MySQL / MariaDB JDBC driver found. Put mysql-connector-j or mariadb-java-client"
+                + " (.jar) into " + libDirectory.toAbsolutePath());
     }
 
     /** In-memory H2, for tests. */
     public static Database openInMemory(String name) throws SQLException {
-        Connection connection = new org.h2.Driver().connect("jdbc:h2:mem:" + name + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", new Properties());
-        Database database = new Database(connection);
-        database.sync(Database::migrate);
+        String url = "jdbc:h2:mem:" + name + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
+        Database database = new Database(() -> new org.h2.Driver().connect(url, new Properties()), false);
+        database.sync(database::migrate);
         return database;
     }
 
@@ -67,12 +139,25 @@ public final class Database implements AutoCloseable {
         CompletableFuture<T> future = new CompletableFuture<>();
         executor.execute(() -> {
             try {
-                future.complete(work.apply(connection));
+                future.complete(work.apply(validConnection()));
             } catch (Throwable error) {
                 future.completeExceptionally(error);
             }
         });
         return future;
+    }
+
+    /** The open connection, replaced first if it went stale. Database thread only. */
+    private Connection validConnection() throws SQLException {
+        if (mysql && !connection.isValid(2)) {
+            try {
+                connection.close();
+            } catch (SQLException ignored) {
+                // already broken
+            }
+            connection = connector.connect();
+        }
+        return connection;
     }
 
     /** Runs on the database thread and waits; only for startup and tests. */
@@ -194,9 +279,18 @@ public final class Database implements AutoCloseable {
                         detail VARCHAR(1024) NOT NULL
                     )""",
                     "CREATE INDEX IF NOT EXISTS bvc_audit_at ON bvc_audit(at)"
+            ),
+            // 3: panel sessions survive a proxy restart (only a SHA-256 of the cookie is stored).
+            List.of(
+                    """
+                    CREATE TABLE IF NOT EXISTS bvc_web_sessions (
+                        id_hash VARCHAR(64) PRIMARY KEY,
+                        username VARCHAR(32) NOT NULL,
+                        expires_at BIGINT NOT NULL
+                    )"""
             ));
 
-    private static Void migrate(Connection connection) throws SQLException {
+    private Void migrate(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("CREATE TABLE IF NOT EXISTS bvc_schema (version INT NOT NULL)");
             int current = 0;
@@ -207,7 +301,8 @@ public final class Database implements AutoCloseable {
             }
             for (int version = current; version < MIGRATIONS.size(); version++) {
                 for (String sql : MIGRATIONS.get(version)) {
-                    statement.execute(sql);
+                    // MySQL has no CREATE INDEX IF NOT EXISTS; each migration runs only once anyway.
+                    statement.execute(mysql ? sql.replace("CREATE INDEX IF NOT EXISTS", "CREATE INDEX") : sql);
                 }
                 statement.execute("INSERT INTO bvc_schema (version) VALUES (" + (version + 1) + ")");
             }

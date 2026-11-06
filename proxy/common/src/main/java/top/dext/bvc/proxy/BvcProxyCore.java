@@ -102,13 +102,14 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         Path data = platform.dataDirectory();
         config = BvcConfig.load(data.resolve("config.yml"));
         messages = Messages.load(data.resolve("messages.yml"));
-        database = Database.openH2(data.resolve("data"));
+        database = openDatabase(data);
         stores = new Stores(database);
         mutes = new MuteManager(stores, clock, logger, this::onMutesChanged, this::onMuteSwitchChanged);
         mutes.load();
         mutes.addListener(new MuteNotifier());
         router = new VoiceRouter(sessions, routes, mutes, () -> config, clock);
-        backend = new BackendBridge(sessions, routes, router, mutes, logger, platform.pluginVersion());
+        backend = new BackendBridge(sessions, routes, router, mutes, logger, platform.pluginVersion(),
+                () -> config.backendSecret());
 
         recorder = new Recorder(data.resolve("recordings"), new RecordingIndex(database), new HeardLog(heardRetention()),
                 () -> config, logger);
@@ -493,6 +494,17 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
     /** Floodgate gives Bedrock players UUIDs whose upper 64 bits are zero. */
     static boolean isBedrock(UUID uuid) {
         return uuid.getMostSignificantBits() == 0;
+    }
+
+    private Database openDatabase(Path data) throws java.sql.SQLException {
+        BvcConfig.Storage storage = config.storage();
+        if (storage.type() == BvcConfig.StorageType.H2) {
+            return Database.openH2(data.resolve("data"));
+        }
+        Database db = Database.openMySql(data.resolve("lib"), storage.host(), storage.port(), storage.database(),
+                storage.user(), storage.password(), storage.parameters());
+        logger.info("Using " + storage.type() + " database " + storage.database() + " on " + storage.host() + ":" + storage.port());
+        return db;
     }
 
     // ------------------------------------------------------------------ reports

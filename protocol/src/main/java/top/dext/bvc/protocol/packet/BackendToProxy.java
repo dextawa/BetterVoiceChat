@@ -58,21 +58,32 @@ public final class BackendToProxy {
         public final String pluginVersion;
         public final String software;
         public final long instanceId;
+        /** {@link top.dext.bvc.protocol.crypto.BvcCrypto#linkProof} when a shared secret is set, else empty. */
+        public final byte[] proof;
 
         public BackendHello(int protocolVersion, String pluginVersion, String software, long instanceId) {
+            this(protocolVersion, pluginVersion, software, instanceId, new byte[0]);
+        }
+
+        public BackendHello(int protocolVersion, String pluginVersion, String software, long instanceId, byte[] proof) {
             this.protocolVersion = protocolVersion;
             this.pluginVersion = pluginVersion;
             this.software = software;
             this.instanceId = instanceId;
+            this.proof = proof;
         }
 
         static BackendHello read(Buf buf) {
-            return new BackendHello(buf.readVarInt(), buf.readString(64), buf.readString(256), buf.readLong());
+            BackendHello base = new BackendHello(buf.readVarInt(), buf.readString(64), buf.readString(256), buf.readLong());
+            return buf.isReadable()
+                    ? new BackendHello(base.protocolVersion, base.pluginVersion, base.software, base.instanceId, buf.readByteArray(64))
+                    : base;
         }
 
         @Override
         public void write(Buf buf) {
-            buf.writeVarInt(protocolVersion).writeString(pluginVersion).writeString(software).writeLong(instanceId);
+            buf.writeVarInt(protocolVersion).writeString(pluginVersion).writeString(software).writeLong(instanceId)
+                    .writeByteArray(proof);
         }
 
         @Override
