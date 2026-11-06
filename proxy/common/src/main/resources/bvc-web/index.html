@@ -46,7 +46,7 @@
       <option value="REJECTED">已处理（不成立）</option>
       <option value="">全部</option>
     </select>
-    <button id="report-refresh">刷新</button>
+    <button id="report-refresh" class="secondary">刷新</button>
   </div>
   <table class="list">
     <thead><tr><th>#</th><th>时间</th><th>子服</th><th>举报人</th><th>被举报人</th><th>原因</th><th>状态</th></tr></thead>
@@ -64,18 +64,24 @@
       <button id="p-stop">■ 停止</button>
       <span id="p-time">00:00</span>
       <label><input type="checkbox" id="p-heard-only"> 只播举报人听到的</label>
-      <span class="hint">点击时间轴跳转；每行可单独静音或独听。</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--target)"></i>被举报人</span>
+      <span><i style="background:var(--reporter)"></i>举报人</span>
+      <span><i style="background:var(--other)"></i>其他人（举报人听到的）</span>
+      <span><i style="background:var(--other);opacity:.4"></i>举报人没听到</span>
+      <span>点击时间轴跳转；“静”静音一行，“独”只听这一行</span>
     </div>
     <div id="p-timeline" class="timeline"></div>
   </div>
   <h3>处理</h3>
-  <div class="toolbar">
+  <div class="actions">
     <input id="r-note" placeholder="备注（可选）" size="40">
-    <button id="r-accept">举报成立</button>
-    <button id="r-reject">不成立</button>
-    <button id="r-reopen">重新打开</button>
+    <button id="r-accept" class="danger">举报成立</button>
+    <button id="r-reject" class="secondary">不成立</button>
+    <button id="r-reopen" class="secondary">重新打开</button>
   </div>
-  <div id="r-mute" class="toolbar" hidden>
+  <div id="r-mute" class="actions" style="margin-top:8px" hidden>
     <strong>禁麦被举报人：</strong>
     <select id="r-mute-scope"></select>
     <select id="r-mute-minutes">
@@ -83,7 +89,7 @@
       <option value="10080">7 天</option><option value="0">永久</option>
     </select>
     <input id="r-mute-reason" placeholder="原因" size="24">
-    <button id="r-mute-go">禁麦</button>
+    <button id="r-mute-go" class="danger">禁麦</button>
   </div>
   <p id="r-msg"></p>
 </template>

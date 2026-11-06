@@ -17,7 +17,7 @@ import top.dext.bvc.client.VoiceClient;
 /**
  * Local voice settings (activation, threshold, volumes, devices, HUD, per-player volume).
  * Every row is a label plus two buttons: {@code <} steps back, the value button steps forward.
- * Labels are inactive buttons, so no text drawing differs between Minecraft versions.
+ * Labels and the title are inactive buttons, so no text drawing differs between Minecraft versions.
  */
 public final class VoiceSettingsScreen extends Screen {
 
@@ -45,43 +45,63 @@ public final class VoiceSettingsScreen extends Screen {
     protected void init() {
         valueButtons.clear();
         shownRows.clear();
-        int perPage = Math.max(1, (height - 70) / ROW_HEIGHT);
+        // Layout: title bar, rows, a line reserved for the microphone-test hint, then the pager.
+        int top = 8;
+        int bottom = height - 26;
+        int rowsTop = top + 26;
+        int rowsBottom = bottom - 26;
+        int perPage = Math.max(1, (rowsBottom - rowsTop) / ROW_HEIGHT);
         int pages = (rows.size() + perPage - 1) / perPage;
         page = Math.max(0, Math.min(page, pages - 1));
-        int left = width / 2 - (LABEL_WIDTH + 24 + VALUE_WIDTH) / 2;
-        int y = 30;
+        int total = LABEL_WIDTH + 4 + 20 + 2 + VALUE_WIDTH + 2 + 20;
+        int left = width / 2 - total / 2;
+
+        Component title = pages > 1
+                ? VoiceHud.literal("").append(VoiceHud.tr(SettingsModel.TITLE)).append("  " + (page + 1) + "/" + pages)
+                : VoiceHud.tr(SettingsModel.TITLE);
+        Button titleBar = button(left, top, total, title, b -> { });
+        titleBar.active = false;
+        add(titleBar);
+
+        int y = rowsTop;
         for (int i = page * perPage; i < Math.min(rows.size(), (page + 1) * perPage); i++) {
             final SettingsModel.Row row = rows.get(i);
             Button label = button(left, y, LABEL_WIDTH, labelOf(row), b -> { });
             label.active = false;
             add(label);
-            add(button(left + LABEL_WIDTH + 2, y, 20, VoiceHud.literal("<"), b -> {
+            int x = left + LABEL_WIDTH + 4;
+            add(button(x, y, 20, VoiceHud.literal("<"), b -> {
                 row.press(true);
                 refresh();
             }));
-            Button value = button(left + LABEL_WIDTH + 24, y, VALUE_WIDTH, valueOf(row), b -> {
+            Button value = button(x + 22, y, VALUE_WIDTH, valueOf(row), b -> {
                 row.press(false);
                 refresh();
             });
             add(value);
+            add(button(x + 22 + VALUE_WIDTH + 2, y, 20, VoiceHud.literal(">"), b -> {
+                row.press(false);
+                refresh();
+            }));
             valueButtons.add(value);
             shownRows.add(row);
             y += ROW_HEIGHT;
         }
-        int bottom = height - 28;
-        hint = button(width / 2 - 160, bottom - 24, 320, VoiceHud.literal(""), b -> { });
+        hint = button(left, rowsBottom + 2, total, VoiceHud.literal(""), b -> { });
         hint.active = false;
         hint.visible = false;
         add(hint);
+        int doneWidth = pages > 1 ? total - 2 * 54 : total;
         if (pages > 1) {
-            Button previous = button(width / 2 - 154, bottom, 50, VoiceHud.literal("<<"), b -> turn(-1));
+            Button previous = button(left, bottom, 50, VoiceHud.literal("<"), b -> turn(-1));
             previous.active = page > 0;
             add(previous);
-            Button next = button(width / 2 + 104, bottom, 50, VoiceHud.literal(">>"), b -> turn(1));
+            Button next = button(left + total - 50, bottom, 50, VoiceHud.literal(">"), b -> turn(1));
             next.active = page < pages - 1;
             add(next);
         }
-        add(button(width / 2 - 100, bottom, 200, VoiceHud.tr("gui.done"), b -> onClose()));
+        add(button(left + (total - doneWidth) / 2, bottom, doneWidth, VoiceHud.tr("gui.done"), b -> onClose()));
+        refresh();
     }
 
     private void turn(int delta) {

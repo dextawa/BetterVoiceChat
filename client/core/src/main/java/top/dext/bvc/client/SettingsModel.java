@@ -79,7 +79,8 @@ public final class SettingsModel {
         rows.add(new Row("gui.bettervoicechat.threshold") {
             @Override
             public String value() {
-                return Math.round(settings().voiceThresholdDb()) + " dB  (" + Math.round(client.status().microphoneLevelDb) + " dB)";
+                // the threshold, then a live meter of the microphone against it
+                return Math.round(settings().voiceThresholdDb()) + " dB " + meter(client.status().microphoneLevelDb, settings().voiceThresholdDb());
             }
 
             @Override
@@ -241,19 +242,25 @@ public final class SettingsModel {
         }
         switch (test.state()) {
             case STARTING:
-                return "... " + Math.round(test.levelDb()) + " dB";
+                return "... " + meter(test.levelDb(), settings().voiceThresholdDb());
             case FAILED:
                 return "X " + test.error();
             case SILENT:
                 return "?? " + Math.round(test.levelDb()) + " dB (" + Math.round(test.peakDb()) + ")";
             default:
-                int bars = Math.max(0, Math.min(10, Math.round((test.levelDb() + 70f) / 7f)));
-                StringBuilder meter = new StringBuilder();
-                for (int i = 0; i < 10; i++) {
-                    meter.append(i < bars ? '|' : '.');
-                }
-                return "OK " + Math.round(test.levelDb()) + " dB " + meter;
+                return "OK " + meter(test.levelDb(), settings().voiceThresholdDb());
         }
+    }
+
+    /** Ten-step level meter: '|' up to the level, '+' where the threshold sits. */
+    static String meter(float levelDb, float thresholdDb) {
+        int level = Math.max(0, Math.min(10, Math.round((levelDb + 70f) / 7f)));
+        int threshold = Math.max(0, Math.min(9, Math.round((thresholdDb + 70f) / 7f)));
+        StringBuilder out = new StringBuilder("[");
+        for (int i = 0; i < 10; i++) {
+            out.append(i < level ? '|' : i == threshold ? '+' : '.');
+        }
+        return out.append(']').toString();
     }
 
     /** Status line for the screen (null if there is nothing to say), as a translation key. */

@@ -42,38 +42,51 @@ public final class LegacySettingsScreen extends GuiScreen {
         buttonList.clear();
         shown.clear();
         values.clear();
-        int perPage = Math.max(1, (height - 70) / ROW_HEIGHT);
+        // Same layout as the modern screen: title, rows (< value >), hint line, pager.
+        int top = 8;
+        int bottom = height - 26;
+        int rowsTop = top + 26;
+        int rowsBottom = bottom - 26;
+        int perPage = Math.max(1, (rowsBottom - rowsTop) / ROW_HEIGHT);
         int pages = (rows.size() + perPage - 1) / perPage;
         page = Math.max(0, Math.min(page, pages - 1));
-        int left = width / 2 - (LABEL_WIDTH + 24 + VALUE_WIDTH) / 2;
-        int y = 30;
+        int total = LABEL_WIDTH + 4 + 20 + 2 + VALUE_WIDTH + 2 + 20;
+        int left = width / 2 - total / 2;
+        GuiButton title = new GuiButton(0, left, top, total, 20, I18n.format(SettingsModel.TITLE)
+                + (pages > 1 ? "  " + (page + 1) + "/" + pages : ""));
+        title.enabled = false;
+        buttonList.add(title);
+        int y = rowsTop;
         for (int i = page * perPage; i < Math.min(rows.size(), (page + 1) * perPage); i++) {
             SettingsModel.Row row = rows.get(i);
             int index = shown.size();
             GuiButton label = new GuiButton(0, left, y, LABEL_WIDTH, 20, labelOf(row));
             label.enabled = false;
             buttonList.add(label);
-            buttonList.add(new GuiButton(FIRST_ROW + index * 2, left + LABEL_WIDTH + 2, y, 20, 20, "<"));
-            GuiButton value = new GuiButton(FIRST_ROW + index * 2 + 1, left + LABEL_WIDTH + 24, y, VALUE_WIDTH, 20, valueOf(row));
+            int x = left + LABEL_WIDTH + 4;
+            buttonList.add(new GuiButton(FIRST_ROW + index * 2, x, y, 20, 20, "<"));
+            GuiButton value = new GuiButton(FIRST_ROW + index * 2 + 1, x + 22, y, VALUE_WIDTH, 20, valueOf(row));
             buttonList.add(value);
+            buttonList.add(new GuiButton(FIRST_ROW + index * 2 + 1, x + 22 + VALUE_WIDTH + 2, y, 20, 20, ">"));
             values.add(value);
             shown.add(row);
             y += ROW_HEIGHT;
         }
-        int bottom = height - 28;
-        hint = new GuiButton(0, width / 2 - 160, bottom - 24, 320, 20, "");
+        hint = new GuiButton(0, left, rowsBottom + 2, total, 20, "");
         hint.enabled = false;
         hint.visible = false;
         buttonList.add(hint);
+        int doneWidth = pages > 1 ? total - 2 * 54 : total;
         if (pages > 1) {
-            GuiButton previous = new GuiButton(PREVIOUS, width / 2 - 154, bottom, 50, 20, "<<");
+            GuiButton previous = new GuiButton(PREVIOUS, left, bottom, 50, 20, "<");
             previous.enabled = page > 0;
             buttonList.add(previous);
-            GuiButton next = new GuiButton(NEXT, width / 2 + 104, bottom, 50, 20, ">>");
+            GuiButton next = new GuiButton(NEXT, left + total - 50, bottom, 50, 20, ">");
             next.enabled = page < pages - 1;
             buttonList.add(next);
         }
-        buttonList.add(new GuiButton(DONE, width / 2 - 100, bottom, 200, 20, I18n.format("gui.done")));
+        buttonList.add(new GuiButton(DONE, left + (total - doneWidth) / 2, bottom, doneWidth, 20, I18n.format("gui.done")));
+        refresh();
     }
 
     @Override

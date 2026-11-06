@@ -235,6 +235,14 @@ function setupPlayer (view, r) {
       seek(start + (event.clientX - rect.left) / rect.width * span)
     })
   }
+  // Time axis: a tick every 10 / 30 / 60 s depending on the window length.
+  const step = span > 600_000 ? 60_000 : span > 180_000 ? 30_000 : 10_000
+  const axis = el('div', { class: 'axis' })
+  for (let t = Math.ceil(start / step) * step; t <= end; t += step) {
+    const d = new Date(t)
+    axis.append(el('span', { style: `left:${(t - start) / span * 100}%` }, `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`))
+  }
+  timeline.prepend(axis)
   const cursors = lanes.map((l) => { const c = el('div', { class: 'cursor', style: 'left:0' }); l.lane.append(c); return c })
   const heardOnly = $('#p-heard-only', view)
   const timeLabel = $('#p-time', view)
