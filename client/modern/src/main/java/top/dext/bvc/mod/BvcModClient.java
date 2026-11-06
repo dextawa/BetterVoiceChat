@@ -156,6 +156,9 @@ public final class BvcModClient {
 
     /** Once per client tick, on the game thread. */
     public void onTick(Minecraft mc) {
+        //? if <1.17 {
+        /*devJoin(mc);
+        *///?}
         if (talkKey == null) {
             return;
         }
@@ -185,6 +188,23 @@ public final class BvcModClient {
         *///?}
         voice.positions().update(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), yaw, others);
     }
+
+    //? if <1.17 {
+    /*private boolean devJoined;
+
+    // 1.16.5 drops the --server connect screen behind the loading overlay. Dev runs pass
+    // -Dbvc.devJoin=host:port instead; never set in normal play.
+    private void devJoin(Minecraft mc) {
+        String target = System.getProperty("bvc.devJoin");
+        if (devJoined || target == null || !(mc.screen instanceof net.minecraft.client.gui.screens.TitleScreen)) {
+            return;
+        }
+        devJoined = true;
+        int colon = target.lastIndexOf(':');
+        mc.setScreen(new net.minecraft.client.gui.screens.ConnectScreen(mc.screen, mc,
+                target.substring(0, colon), Integer.parseInt(target.substring(colon + 1))));
+    }
+    *///?}
 
     public void onShutdown() {
         voice.settings().save();

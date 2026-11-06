@@ -77,6 +77,8 @@ loom.runs.named("client") {
         } else {
             // Before 1.20 the client only knows --server / --port.
             programArgs("--server", it.substringBeforeLast(':'), "--port", it.substringAfterLast(':'))
+            // 1.16.5 loses the --server connect screen behind the loading overlay (see devJoin).
+            if (stonecutter.eval(minecraftVersion, "<1.17")) vmArgs("-Dbvc.devJoin=$it")
         }
     }
     findProperty("bvc.user")?.let { programArgs("--username", it.toString()) }
