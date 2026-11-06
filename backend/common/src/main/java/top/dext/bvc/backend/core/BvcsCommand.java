@@ -1,4 +1,4 @@
-package top.dext.bvc.backend;
+package top.dext.bvc.backend.core;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -7,13 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.Player;
+import java.util.UUID;
 
 import top.dext.bvc.api.server.ZoneSettings;
 import top.dext.bvc.backend.voice.PlayerPlan;
@@ -23,18 +17,17 @@ import top.dext.bvc.protocol.packet.BackendToProxy.PlayerFlags;
 /**
  * {@code /bvcs}: see what the sub-server decided and reload the config.
  */
-final class BvcsCommand implements CommandExecutor, TabCompleter {
+final class BvcsCommand {
 
     private static final List<String> SUBCOMMANDS = Arrays.asList("info", "player", "rooms", "reload");
 
-    private final BvcBukkitPlugin plugin;
+    private final BvcBackend plugin;
 
-    BvcsCommand(BvcBukkitPlugin plugin) {
+    BvcsCommand(BvcBackend plugin) {
         this.plugin = plugin;
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    void execute(BackendSender sender, String[] args) {
         String sub = args.length == 0 ? "info" : args[0].toLowerCase(Locale.ROOT);
         if (sub.equals("info")) {
             info(sender);
@@ -51,13 +44,12 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
             send(sender, "&b/bvcs rooms &7- 列出插件创建的房间");
             send(sender, "&b/bvcs reload &7- 重新加载配置");
         }
-        return true;
     }
 
-    private void info(CommandSender sender) {
+    private void info(BackendSender sender) {
         ProxyLink link = plugin.link();
         VoiceEngine engine = plugin.engine();
-        send(sender, "&bBetterVoiceChat 子服 " + plugin.getDescription().getVersion());
+        send(sender, "&bBetterVoiceChat 子服 " + plugin.platform().pluginVersion());
         send(sender, "&7BC 连接：" + (link.proxySeen() ? "&a已连接（BC 插件 " + link.proxyVersion() + "）"
                 : "&e尚未收到 BC 消息（有玩家进服后才会建立）"));
         send(sender, "&7已绑定玩家：&f" + link.boundCount() + "&7，参与语音计算：&f" + engine.plannedCount());
@@ -70,13 +62,13 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
         send(sender, "&7房间数：&f" + engine.rooms.size() + "&7，旁观者：&f" + engine.rules().spectators);
     }
 
-    private void player(CommandSender sender, String name) {
-        Player target = Bukkit.getPlayerExact(name);
+    private void player(BackendSender sender, String name) {
+        UUID target = plugin.platform().playerByName(name);
         if (target == null) {
             send(sender, "&c玩家不在线：" + name);
             return;
         }
-        ProxyLink.Binding binding = plugin.link().binding(target.getUniqueId());
+        ProxyLink.Binding binding = plugin.link().binding(target);
         if (binding == null) {
             send(sender, "&e" + name + " 还没有被 BC 绑定（BC 没装 BVC，或刚进服）。");
             return;
@@ -85,24 +77,24 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
             send(sender, "&e" + name + " 没有连上语音（没装 Mod 或连接中）。编号 " + binding.id);
             return;
         }
-        PlayerPlan plan = plugin.engine().planOf(target.getUniqueId());
+        PlayerPlan plan = plugin.engine().planOf(target);
         if (plan == null) {
             send(sender, "&e" + name + " 还没有被计算，请稍后再试。");
             return;
         }
         send(sender, "&b" + name + " &7(编号 " + plan.id + ")");
-        PlayerSnapshot snapshot = plugin.engine().snapshotOf(target.getUniqueId());
+        PlayerSnapshot snapshot = plugin.engine().snapshotOf(target);
         if (snapshot != null) {
             send(sender, String.format(Locale.ROOT, "&7采样位置：&f%s %.1f %.1f %.1f &7（%d 毫秒前）", snapshot.world,
-                    snapshot.x, snapshot.y, snapshot.z, plugin.engine().sampleAge(target.getUniqueId())));
+                    snapshot.x, snapshot.y, snapshot.z, plugin.engine().sampleAge(target)));
         }
         send(sender, "&7区域：&f" + (plan.zoneName.isEmpty() ? "默认" : plan.zoneName) + " &7- &f" + describe(plan.zone));
         send(sender, "&7房间编号：&f" + plan.roomId + "&7，分组：&f" + (plan.groupKey == null ? "无" : plan.groupKey));
         List<String> names = new ArrayList<String>();
         for (int id : plan.neighbors) {
             PlayerPlan neighbor = plugin.engine().planOf(id);
-            Player player = neighbor == null ? null : Bukkit.getPlayer(neighbor.uuid);
-            names.add(player == null ? "#" + id : player.getName());
+            String player = neighbor == null ? null : plugin.platform().nameOf(neighbor.uuid);
+            names.add(player == null ? "#" + id : player);
         }
         send(sender, "&7范围内能听到他的人（" + names.size() + "）：&f" + (names.isEmpty() ? "-" : join(names)));
         send(sender, "&7优先级：&f" + plan.priority + "&7，能说话：&f" + yesNo(plan.flags & PlayerFlags.CAN_SPEAK)
@@ -110,7 +102,7 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
                 + "&7，能广播：&f" + yesNo(plan.flags & PlayerFlags.CAN_BROADCAST));
     }
 
-    private void rooms(CommandSender sender) {
+    private void rooms(BackendSender sender) {
         Map<String, ZoneSettings> rooms = plugin.engine().rooms;
         if (rooms.isEmpty()) {
             send(sender, "&7当前没有房间。");
@@ -123,8 +115,7 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+    List<String> complete(String[] args) {
         List<String> out = new ArrayList<String>();
         if (args.length == 1) {
             for (String sub : SUBCOMMANDS) {
@@ -133,9 +124,9 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("player")) {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                if (player.getName().toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
-                    out.add(player.getName());
+            for (String player : plugin.platform().onlinePlayerNames()) {
+                if (player.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                    out.add(player);
                 }
             }
         }
@@ -182,7 +173,7 @@ final class BvcsCommand implements CommandExecutor, TabCompleter {
         return out.toString();
     }
 
-    private static void send(CommandSender sender, String text) {
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', text));
+    private static void send(BackendSender sender, String text) {
+        sender.send(text);
     }
 }

@@ -12,8 +12,7 @@ val folia: SourceSet by sourceSets.creating {
 }
 
 dependencies {
-    implementation(project(":protocol"))
-    implementation(project(":api"))
+    implementation(project(":backend:common"))
     // Compile against the oldest API so the jar loads on every version. Its bungeecord-chat
     // snapshot is no longer hosted anywhere, and BVC does not need it.
     compileOnly(libs.spigot.api.legacy) {

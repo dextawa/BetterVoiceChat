@@ -40,6 +40,7 @@ include(
     "proxy:common",
     "proxy:velocity",
     "proxy:bungee",
+    "backend:common",
     "backend:bukkit",
     "client:core",
 )

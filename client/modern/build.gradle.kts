@@ -45,19 +45,25 @@ dependencies {
         "forge" -> "forge"("net.minecraftforge:forge:${prop("deps.forge")}")
     }
 
-    // Voice engine, protocol and Opus codec.
+    // Voice engine, protocol and Opus codec; the sub-server core (and the API it implements)
+    // for dedicated servers.
     "implementation"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+    "implementation"("top.dext.bvc:bvc-backend-common:${prop("mod.version")}")
     if (loader == "fabric") {
         // Fabric loads nested jars reliably, in dev and in production.
         "include"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
         "include"("top.dext.bvc:protocol:${prop("mod.version")}")
+        "include"("top.dext.bvc:bvc-backend-common:${prop("mod.version")}")
+        "include"("top.dext.bvc:api:${prop("mod.version")}")
         "include"("io.github.jaredmdobson:concentus:1.0.2")
     } else {
         // Forge 1.16.5 has no jar-in-jar, and FML's dev runs do not put nested jars on the mod
         // classpath: copy the classes into the mod jar instead (see the jar task), and give dev
         // runs the libraries directly.
         "bundled"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+        "bundled"("top.dext.bvc:bvc-backend-common:${prop("mod.version")}")
         "forgeRuntimeLibrary"("top.dext.bvc:bvc-client-core:${prop("mod.version")}")
+        "forgeRuntimeLibrary"("top.dext.bvc:bvc-backend-common:${prop("mod.version")}")
     }
 }
 

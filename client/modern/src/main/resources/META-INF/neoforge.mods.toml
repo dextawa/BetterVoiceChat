@@ -8,7 +8,7 @@ version = "${version}"
 displayName = "BetterVoiceChat"
 authors = "dext.top"
 description = '''TCP voice chat for Minecraft networks. Server-decided voice zones, push-to-talk, mutes and reports.'''
-# Client-only: never mark servers as incompatible in the server list.
+# Optional on both sides: clients join servers without it, servers accept clients without it.
 displayTest = "IGNORE_ALL_VERSION"
 
 [[dependencies.bettervoicechat]]
@@ -18,4 +18,4 @@ mandatory = true
 type = "required"
 versionRange = "${forgeRange}"
 ordering = "NONE"
-side = "CLIENT"
+side = "BOTH"

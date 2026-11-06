@@ -1,7 +1,7 @@
 # 端到端测试
 
-用真实的 Velocity + Paper 服务端和机器人客户端测试整条链路：
-机器人（BVC 协议）→ BC 插件 → 子服插件 → BC 查表转发 → 另一个机器人。
+用真实的 Velocity + 子服（Paper，或装了服务端 Mod 的 Fabric / NeoForge / Forge）和机器人客户端测试整条链路：
+机器人（BVC 协议）→ BC 插件 → 子服插件 / 服务端 Mod → BC 查表转发 → 另一个机器人。
 
 两个机器人：BotA 走传输方式 B（插件消息），BotB 走传输方式 A（同端口的第二条连接，ECDH + AES）。
 机器人用 [mineflayer](https://github.com/PrismarineJS/mineflayer)，行为和原版客户端一致（确认传送、确认区块等），BVC 的消息走它底层的连接。
@@ -12,6 +12,7 @@
 |---|---|
 | `node e2e.js 25599 1.21.4` | 基础：握手、A/B 两种传输、子服下发区域、双向听到、顺序、结束包、心跳、不回声 |
 | `node e2e.js 25599 1.21.4 zones <子服 config.yml 路径>` | 规则：范围内外（48 格边界）、配置重载切换组队麦、计分板队伍、队伍不限距离、退队、自由麦、旁观者两种策略、按世界设置区域 |
+| `node e2e.js 25599 1.21.4 switch lobby,fabric,neoforge` | 换服：一个机器人用 `/server` 依次进入这些子服，每个子服都要下发自己的区域 |
 
 `zones` 会临时修改子服的 `config.yml`，结束时恢复。它通过 RCON 执行 `tp`、`team`、`gamemode`、`bvcs reload` 等命令。
 
@@ -44,6 +45,20 @@
    ```
 
 必须用环境变量 `BVC_RCON_PASSWORD` 传入上面设置的 RCON 密码；`BVC_HOST`、`BVC_RCON_PORT` 可覆盖默认值。
+
+## 测服务端 Mod
+
+服务端 Mod 就是客户端 Mod 的同一个 jar（`client/modern/versions/<版本>-<加载器>/build/libs/`），放进 Fabric / NeoForge / Forge 独立服务端的 `mods/`（Fabric 另需 Fabric API）。配置文件在 `config/bettervoicechat/config.yml`。在 `velocity.toml` 的 `[servers]` 里加上这个子服，然后：
+
+```bash
+BVC_SERVER=fabric BVC_RCON_PORT=<该服的 rcon.port> node e2e.js 25599 1.21.4
+BVC_SERVER=fabric BVC_RCON_PORT=<该服的 rcon.port> BVC_NETHER_WORLD=minecraft:the_nether BVC_NETHER_Y=129 node e2e.js 25599 1.21.4 zones path/to/config/bettervoicechat/config.yml
+```
+
+- `BVC_SERVER`：机器人进入的子服在 `velocity.toml` 里的名字（默认 `lobby`）。
+- `BVC_NETHER_WORLD`：配置里下界的名字。Bukkit 用世界文件夹名 `world_nether`，Mod 用维度 ID `minecraft:the_nether`。
+- `BVC_NETHER_Y`：传送到下界的高度。新生成的下界在 y=70 常常是实心的，用 129（下界顶层上方）更稳。
+- Velocity 不转换版本：机器人的版本要和子服一致（例如 1.20.1 的 Fabric 子服用 `node e2e.js 25599 1.20.1`）。
 
 ## 注意
 

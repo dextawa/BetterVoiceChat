@@ -1,15 +1,10 @@
-package top.dext.bvc.backend;
+package top.dext.bvc.backend.core;
 
 import java.security.SecureRandom;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
-
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import top.dext.bvc.protocol.BvcProtocol;
 import top.dext.bvc.protocol.ProtocolException;
@@ -23,12 +18,12 @@ import top.dext.bvc.protocol.packet.ProxyToBackend;
  * Plugin messages need a player connection to travel on, so outgoing packets ride on an online
  * player's connection, preferably one where the proxy registered {@code bvc:server}.
  */
-final class ProxyLink implements PluginMessageListener {
+public final class ProxyLink {
 
     /** Compact id and voice state the proxy assigned to a player. */
-    static final class Binding {
-        final int id;
-        final boolean voiceEnabled;
+    public static final class Binding {
+        public final int id;
+        public final boolean voiceEnabled;
 
         Binding(int id, boolean voiceEnabled) {
             this.id = id;
@@ -36,12 +31,12 @@ final class ProxyLink implements PluginMessageListener {
         }
     }
 
-    private final Plugin plugin;
-    private final Logger logger;
+    private final BackendLog logger;
+    private final String pluginVersion;
     private final String software;
     private final long instanceId = new SecureRandom().nextLong();
     private final Map<UUID, Binding> bindings = new ConcurrentHashMap<UUID, Binding>();
-    private final Map<UUID, Player> online = new ConcurrentHashMap<UUID, Player>();
+    private final Map<UUID, BackendPlayer> online = new ConcurrentHashMap<UUID, BackendPlayer>();
     private final AtomicBoolean resyncRequested = new AtomicBoolean(true);
     private final AtomicBoolean versionWarned = new AtomicBoolean();
 
@@ -49,80 +44,73 @@ final class ProxyLink implements PluginMessageListener {
     private volatile boolean proxySeen;
     private volatile String proxyVersion = "";
 
-    ProxyLink(Plugin plugin, String software) {
-        this.plugin = plugin;
-        this.logger = plugin.getLogger();
+    public ProxyLink(BackendLog logger, String pluginVersion, String software) {
+        this.logger = logger;
+        this.pluginVersion = pluginVersion;
         this.software = software;
     }
 
     // ------------------------------------------------------------------ players
 
-    void onJoin(Player player) {
-        online.put(player.getUniqueId(), player);
+    public void onJoin(BackendPlayer player) {
+        online.put(player.uuid(), player);
     }
 
-    void onQuit(Player player) {
-        online.remove(player.getUniqueId());
-        bindings.remove(player.getUniqueId());
+    public void onQuit(UUID uuid) {
+        online.remove(uuid);
+        bindings.remove(uuid);
     }
 
-    Binding binding(UUID uuid) {
+    public Binding binding(UUID uuid) {
         return bindings.get(uuid);
     }
 
-    boolean isOnline(UUID uuid) {
+    public boolean isOnline(UUID uuid) {
         return online.containsKey(uuid);
     }
 
-    Iterable<Player> onlinePlayers() {
-        return online.values();
-    }
-
-    int boundCount() {
+    public int boundCount() {
         return bindings.size();
     }
 
-    boolean proxySeen() {
+    public boolean proxySeen() {
         return proxySeen;
     }
 
-    String proxyVersion() {
+    public String proxyVersion() {
         return proxyVersion;
     }
 
     /** True once per resync request (proxy hello, backend start, explicit request). */
-    boolean consumeResyncRequest() {
+    public boolean consumeResyncRequest() {
         return resyncRequested.getAndSet(false);
     }
 
-    void requestResync() {
+    public void requestResync() {
         resyncRequested.set(true);
     }
 
     // ------------------------------------------------------------------ incoming
 
-    @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!BvcProtocol.CHANNEL_PROXY.equals(channel)) {
-            return;
-        }
+    /** A {@code bvc:proxy} message arrived on {@code player}'s connection. Any thread. */
+    public void onProxyMessage(BackendPlayer player, byte[] message) {
         Packet<ProxyToBackend.Handler> packet;
         try {
             packet = ProxyToBackend.REGISTRY.decode(message);
         } catch (ProtocolException e) {
-            logger.warning("Bad bvc:proxy message: " + e.getMessage());
+            logger.warn("Bad bvc:proxy message: " + e.getMessage());
             return;
         }
-        online.put(player.getUniqueId(), player);
+        online.put(player.uuid(), player);
         packet.handle(new Incoming(player));
     }
 
     /** Handles one message; {@code via} is the connection it arrived on, reused for replies. */
     private final class Incoming implements ProxyToBackend.Handler {
 
-        private final Player via;
+        private final BackendPlayer via;
 
-        Incoming(Player via) {
+        Incoming(BackendPlayer via) {
             this.via = via;
         }
 
@@ -130,7 +118,7 @@ final class ProxyLink implements PluginMessageListener {
         public void handle(ProxyToBackend.ProxyHello packet) {
             if (packet.protocolVersion != BvcProtocol.VERSION) {
                 if (versionWarned.compareAndSet(false, true)) {
-                    logger.warning("The proxy speaks BVC protocol " + packet.protocolVersion + " but this plugin speaks "
+                    logger.warn("The proxy speaks BVC protocol " + packet.protocolVersion + " but this plugin speaks "
                             + BvcProtocol.VERSION + "; update so both match");
                 }
                 return;
@@ -143,7 +131,7 @@ final class ProxyLink implements PluginMessageListener {
                 proxySeen = true;
                 proxyInstance = packet.instanceId;
             }
-            send(via, new BackendToProxy.BackendHello(BvcProtocol.VERSION, plugin.getDescription().getVersion(),
+            send(via, new BackendToProxy.BackendHello(BvcProtocol.VERSION, pluginVersion,
                     software, instanceId));
             resyncRequested.set(true);
             logger.info("Linked with BetterVoiceChat proxy " + packet.pluginVersion);
@@ -180,8 +168,8 @@ final class ProxyLink implements PluginMessageListener {
      *
      * @return false if nobody is online to carry it
      */
-    boolean send(Packet<BackendToProxy.Handler> packet) {
-        Player carrier = carrier();
+    public boolean send(Packet<BackendToProxy.Handler> packet) {
+        BackendPlayer carrier = carrier();
         if (carrier == null) {
             return false;
         }
@@ -189,18 +177,18 @@ final class ProxyLink implements PluginMessageListener {
         return true;
     }
 
-    private void send(Player carrier, Packet<BackendToProxy.Handler> packet) {
-        carrier.sendPluginMessage(plugin, BvcProtocol.CHANNEL_SERVER, BackendToProxy.REGISTRY.encode(packet));
+    private void send(BackendPlayer carrier, Packet<BackendToProxy.Handler> packet) {
+        carrier.sendPluginMessage(BvcProtocol.CHANNEL_SERVER, BackendToProxy.REGISTRY.encode(packet));
     }
 
     /** Prefers a connection where the proxy registered {@code bvc:server}; {@code null} if nobody is online. */
-    Player carrier() {
-        Player fallback = null;
-        for (Player player : online.values()) {
+    BackendPlayer carrier() {
+        BackendPlayer fallback = null;
+        for (BackendPlayer player : online.values()) {
             if (!player.isOnline()) {
                 continue;
             }
-            if (player.getListeningPluginChannels().contains(BvcProtocol.CHANNEL_SERVER)) {
+            if (player.listensOn(BvcProtocol.CHANNEL_SERVER)) {
                 return player;
             }
             fallback = player;

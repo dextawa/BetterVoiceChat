@@ -1,4 +1,4 @@
-package top.dext.bvc.backend;
+package top.dext.bvc.backend.core;
 
 import java.util.Map;
 import java.util.Optional;
@@ -16,12 +16,12 @@ import top.dext.bvc.protocol.packet.BackendToProxy;
  * {@link BvcServerApi} for minigames. Every call only updates maps; the planner picks the
  * change up on its next pass (within {@code update-interval-ticks}).
  */
-final class BukkitVoiceApi implements BvcServerApi {
+final class BackendVoiceApi implements BvcServerApi {
 
     private final VoiceEngine engine;
     private final ProxyLink link;
 
-    BukkitVoiceApi(VoiceEngine engine, ProxyLink link) {
+    BackendVoiceApi(VoiceEngine engine, ProxyLink link) {
         this.engine = engine;
         this.link = link;
     }

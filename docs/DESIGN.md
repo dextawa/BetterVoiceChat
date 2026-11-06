@@ -51,6 +51,7 @@ BVC 是给 BungeeCord / Velocity 群组服用的 Minecraft 语音插件，用来
 | `proxy/common` | 17 | BC 核心：会话、鉴权、转发、禁麦、录音、举报、Web 后端、存储 |
 | `proxy/velocity` | 17 | Velocity 适配：事件、指令、插件消息、网络管线注入 |
 | `proxy/bungee` | 17 | BungeeCord 适配 |
+| `backend/common` | 8 | 子服核心，不依赖服务端软件：语音判定、和 BC 的通信、配置、`/bvcs`、API 实现。Bukkit 插件和服务端 Mod 共用 |
 | `backend/bukkit` | 8 | 子服插件：Spigot / Paper / Folia，1.8 到最新 |
 | `client/core` | 8 | 客户端核心，不依赖 MC：网络、Opus、混音、抖动缓冲 |
 | `client/mc/*` | 按版本 | 各 MC 版本 / 加载器的适配层，多版本构建（独立 Gradle 构建） |
@@ -300,4 +301,17 @@ BC 和子服各有一个每次启动随机生成的实例 ID，放在 `ProxyHell
 - **26.3 的 API 变化**（已处理）：HUD 绘制改为 `GuiGraphicsExtractor`；按键分类改为 `KeyMapping.Category`；自定义网络包必须注册 `CustomPacketPayload` 类型；NeoForge 的网络包注册设为 `optional()`，没装 BVC 的服务器也能正常进入。
 - **1.20.x 的 API 差异**（已处理）：`ResourceLocation` 代替 `Identifier`，`GuiGraphics.drawString` 代替 `text`，按键分类是普通字符串。1.20.5 之前没有 `CustomPacketPayload.Type` 和 `StreamCodec`：Fabric 用旧的频道 API（`ResourceLocation` + `FriendlyByteBuf`），NeoForge 20.4 用 `RegisterPayloadHandlerEvent`，Forge 1.20.1 用 `EventNetworkChannel`（两端的版本校验都允许对方没装）。这几种旧 API 的回调在网络线程上执行，所以先拷出字节，再切到游戏线程交给客户端核心。Forge 和 NeoForge 20.4 读取 `META-INF/mods.toml`，构建时会把 `neoforge.mods.toml` 改名；所有 Forge 系的版本都设置了 `displayTest = "IGNORE_ALL_VERSION"`，服务器列表不会因为服务器没装这个 Mod 而显示不兼容。
 - **真机测试中发现并修复的问题**（32 个版本逐个启动开发客户端进测试服验证）：Forge 系的开发环境不加载内嵌 jar、1.16.5 Forge 没有 jar-in-jar，所以 Forge / NeoForge 版把客户端核心、协议和 Concentus 的类直接打进 Mod jar（Fabric 仍用内嵌 jar）；Mod 构造时 `Minecraft` 还不存在，配置目录改从加载器取；NeoForge 1.21.6 起客户端收包处理器要用 `RegisterClientPayloadHandlersEvent` 单独注册；NeoForge 20.4 的 `registrar()` 参数是命名空间，版本用 `versioned()`；Forge 的单版本范围必须写成 `[x]`；Fabric API 在 1.17 之前的 Mod ID 是 `fabric`。
+- **服务端 Mod**：见 16.9。
 - **旧版适配层**（`client/legacy`，独立的 Gradle 构建）：1.8.9 和 1.12.2 Forge，用 Essential 维护的 Loom（`gg.essential.loom`）加 MCP 映射，Java 8 由 Gradle 自动下载。两个版本的 MCP 名字差别太大，各写一个入口类（`<版本>/src/.../BvcLegacyForge.java`），不依赖 Minecraft 的部分（语音客户端、进退服检测、HUD 文字）放在 `common/` 共用。旧版 Forge 没有 jar-in-jar，客户端核心、协议和 Concentus 的类直接打进 Mod jar。Forge 版本跟 Essential 的默认配置一致：1.12.2 用 14.23.0.2486（14.23.5 只发布 userdev3 格式，Loom 打补丁会校验失败）、1.8.9 用 11.15.1.2318；pre-1.14 的 intermediary 映射来自 Legacy Fabric 仓库。开发环境里 FML 会提示找不到 `version`（类和 `mcmod.info` 在不同目录），打包后的 jar 正常。
+
+### 16.9 服务端 Mod（Mod 子服）
+
+和 SVC 一样，Fabric / NeoForge / Forge 的独立服务端也可以当 BVC 子服，不需要 Bukkit。做法是把子服插件的逻辑原样搬过去：
+
+- **共用核心**（`backend/common`）：原来子服插件里不依赖 Bukkit 的部分（`voice/*` 的判定、`ProxyLink`、`VoiceEngine`、配置、`/bvcs`、API 实现）都移到这里，入口是 `BvcBackend`。平台只需实现 `BackendPlatform`（日志、版本、配置目录、按名字找玩家）和 `BackendPlayer`（UUID、名字、在不在线、发插件消息），然后转发进服 / 退服 / `bvc:proxy` 消息 / 指令，并且每 `update-interval-ticks` 在拥有玩家的线程上调用一次 `sample(...)`。Bukkit 插件现在也只是这样一层包装。
+- **配置**：Mod 环境没有 YAML 库，`config.yml` 用 `MiniYaml` 读取（只支持这个文件用到的写法：缩进的映射、`- 项` 和 `[a, b]` 列表、`{}`、引号、注释）。Bukkit 插件也改用它，两边行为一致。
+- **同一个 jar**：服务端 Mod 就是客户端 Mod 本身（`client/modern` 的 32 个版本都有）。Fabric 增加 `main` 入口 `BvcFabricServer`、`environment` 改为 `*`；NeoForge 1.20.5+ 增加 `dist = DEDICATED_SERVER` 的 `BvcNeoForgeServer`；Forge 和 NeoForge 20.4 只能有一个 `@Mod` 类，所以客户端入口在独立服务端上转去调用服务端入口。不依赖 MC 的逻辑在 `mod/server/BvcModServer`，只用服务端的类，不会在服务端加载客户端类。单人和局域网（内置服务端）不会启动子服逻辑。
+- **网络**：`bvc:proxy`（BC → 子服）注册为服务端收包，`bvc:server`（子服 → BC）直接发原版的 `ClientboundCustomPayloadPacket`。这个包会经过 BC，BC 截下来，不会到客户端，所以不要求玩家装 Mod。两个通道都注册成可选的，没装 Mod 的玩家照常进服。
+- **和 Bukkit 的差异**：世界名用维度 ID（`minecraft:overworld`、`minecraft:the_nether`），`worlds:` 里要加引号；队伍取玩家的计分板队伍；没有权限插件，优先级和广播只能由 API 设置；`/bvcs` 需要 2 级 OP；软件名报给 BC 为 `<加载器> <MC 版本>`。
+- **测试**（2026-11-06，Velocity 4.3.1）：Fabric 1.21.4、Fabric 1.20.1（旧的频道 API）、NeoForge 1.21.4、Forge 1.20.1 子服的基础 13 项、规则 18 项全部通过；真实 Fabric 1.21.4 客户端经 Velocity 进 NeoForge 子服并连上语音；一个机器人在 Paper、Fabric、NeoForge 子服之间换服，每次都收到对应子服的区域。
+- **已知问题**（都和 Mod 的子服逻辑无关）：NeoForge 1.21.4 子服上，装了 NeoForge 的客户端经 Velocity 进服会被断开，原因是 Velocity 4.3.1 解析服务端的命令列表包失败（服务端不装 BVC 也一样）。NeoForge 1.20.4 子服会踢掉经 Velocity 进服的原版客户端（日志：收到未协商的模组通道包），去掉 Velocity 上的 BVC 插件也一样，直连正常，尚未确认和服务端 Mod 有没有关系。

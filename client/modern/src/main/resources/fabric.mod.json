@@ -6,8 +6,9 @@
   "description": "TCP voice chat for Minecraft networks. Server-decided voice zones, push-to-talk, mutes and reports.",
   "authors": ["dext.top"],
   "license": "MIT",
-  "environment": "client",
+  "environment": "*",
   "entrypoints": {
+    "main": ["top.dext.bvc.mod.fabric.BvcFabricServer"],
     "client": ["top.dext.bvc.mod.fabric.BvcFabric"]
   },
   "depends": {

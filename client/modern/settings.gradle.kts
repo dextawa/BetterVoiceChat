@@ -43,10 +43,12 @@ stonecutter {
 
 rootProject.name = "bettervoicechat-modern"
 
-// The Minecraft-independent client core comes straight from the main build.
+// The Minecraft-independent client and sub-server cores come straight from the main build.
 includeBuild("../..") {
     dependencySubstitution {
         substitute(module("top.dext.bvc:bvc-client-core")).using(project(":client:core"))
         substitute(module("top.dext.bvc:protocol")).using(project(":protocol"))
+        substitute(module("top.dext.bvc:bvc-backend-common")).using(project(":backend:common"))
+        substitute(module("top.dext.bvc:api")).using(project(":api"))
     }
 }

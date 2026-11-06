@@ -65,7 +65,8 @@ public final class BvcForge {
                 () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (version, fromServer) -> true));
         *///?}
         if (FMLEnvironment.dist != Dist.CLIENT) {
-            return; // client-only mod; nothing to do on a dedicated server
+            BvcForgeServer.init(); // dedicated server: the sub-server side
+            return;
         }
         BvcModClient client = BvcModClient.init("forge", FMLPaths.CONFIGDIR.get(), payload -> {
             FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer(payload.data().length));

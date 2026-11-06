@@ -41,7 +41,8 @@ public final class BvcNeoForge {
     public BvcNeoForge(IEventBus modBus) {
         //? if <1.20.5 {
         /*if (FMLEnvironment.dist != Dist.CLIENT) {
-            return; // client-only mod; nothing to do on a dedicated server
+            new BvcNeoForgeServer(modBus); // dedicated server: the sub-server side
+            return;
         }
         *///?}
 

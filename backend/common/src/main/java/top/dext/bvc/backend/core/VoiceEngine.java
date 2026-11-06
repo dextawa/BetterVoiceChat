@@ -1,4 +1,4 @@
-package top.dext.bvc.backend;
+package top.dext.bvc.backend.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,15 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-import org.bukkit.scoreboard.Team;
+import java.util.function.Predicate;
 
 import top.dext.bvc.api.server.ZoneSettings;
 import top.dext.bvc.backend.voice.PlayerOverrides;
@@ -34,17 +26,16 @@ import top.dext.bvc.protocol.packet.Packet;
  * Samples players on their owning thread, plans on a dedicated thread, sends the changes to the
  * proxy. The game threads only pay for reading a few fields per player.
  */
-final class VoiceEngine {
+public final class VoiceEngine {
 
     private static final long PERMISSION_REFRESH_MILLIS = 5_000;
 
     private final ProxyLink link;
-    private final Logger logger;
-    final Map<String, ZoneSettings> rooms = new ConcurrentHashMap<String, ZoneSettings>();
-    final Map<UUID, PlayerOverrides> overrides = new ConcurrentHashMap<UUID, PlayerOverrides>();
+    private final BackendLog logger;
+    public final Map<String, ZoneSettings> rooms = new ConcurrentHashMap<String, ZoneSettings>();
+    public final Map<UUID, PlayerOverrides> overrides = new ConcurrentHashMap<UUID, PlayerOverrides>();
     private final Map<UUID, PlayerSnapshot> snapshots = new ConcurrentHashMap<UUID, PlayerSnapshot>();
     private final Map<UUID, CachedPermissions> permissions = new ConcurrentHashMap<UUID, CachedPermissions>();
-    private final AtomicBoolean scoreboardWarned = new AtomicBoolean();
 
     // Planner-thread state.
     private final VoicePlanner planner = new VoicePlanner();
@@ -72,14 +63,14 @@ final class VoiceEngine {
         }
     }
 
-    VoiceEngine(ProxyLink link, Logger logger, BackendSettings settings) {
+    public VoiceEngine(ProxyLink link, BackendLog logger, BackendSettings settings) {
         this.link = link;
         this.logger = logger;
         this.settings = settings;
         this.rules = settings.rules;
     }
 
-    void start() {
+    public void start() {
         executor = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable runnable) {
@@ -97,7 +88,7 @@ final class VoiceEngine {
         }, period, period, TimeUnit.MILLISECONDS);
     }
 
-    void stop() {
+    public void stop() {
         if (executor != null) {
             executor.shutdownNow();
             executor = null;
@@ -105,97 +96,84 @@ final class VoiceEngine {
     }
 
     /** New config: rules from the file replace any runtime default-zone change. */
-    void apply(BackendSettings newSettings) {
+    public void apply(BackendSettings newSettings) {
         settings = newSettings;
         rules = newSettings.rules;
         permissions.clear();
         link.requestResync();
     }
 
-    VoiceRules rules() {
+    public VoiceRules rules() {
         return rules;
     }
 
-    void setDefaultZone(ZoneSettings zone) {
+    public void setDefaultZone(ZoneSettings zone) {
         rules = rules.withDefaultZone(zone);
     }
 
-    BackendSettings settings() {
+    public BackendSettings settings() {
         return settings;
     }
 
     // ------------------------------------------------------------------ game threads
 
-    /** Called on the thread that owns {@code player}. */
-    void sample(Player player) {
-        UUID uuid = player.getUniqueId();
-        Location location = player.getLocation();
-        if (location.getWorld() == null) {
-            return;
-        }
-        String team = rules.scoreboardTeams ? teamOf(player) : null;
-        CachedPermissions perms = permissionsOf(player);
-        snapshots.put(uuid, new PlayerSnapshot(0, uuid, location.getWorld().getName(), location.getX(), location.getY(),
-                location.getZ(), player.getGameMode() == GameMode.SPECTATOR, team, perms.priority, perms.broadcast));
+    /** Whether {@link #sample} wants the player's scoreboard team; skip the lookup otherwise. */
+    public boolean wantsTeams() {
+        return rules.scoreboardTeams;
+    }
+
+    /**
+     * Called on the thread that owns the player, with what the platform read from it.
+     *
+     * @param team        scoreboard team name, or {@code null}
+     * @param permissions checks a permission node; only called every few seconds
+     */
+    public void sample(UUID uuid, String world, double x, double y, double z, boolean spectator, String team,
+                       Predicate<String> permissions) {
+        CachedPermissions perms = permissionsOf(uuid, permissions);
+        snapshots.put(uuid, new PlayerSnapshot(0, uuid, world, x, y, z, spectator, team, perms.priority, perms.broadcast));
         sampledAt.put(uuid, System.currentTimeMillis());
     }
 
-    PlayerSnapshot snapshotOf(UUID uuid) {
+    public PlayerSnapshot snapshotOf(UUID uuid) {
         return snapshots.get(uuid);
     }
 
     /** Millis since the player was last sampled, or -1. */
-    long sampleAge(UUID uuid) {
+    public long sampleAge(UUID uuid) {
         Long at = sampledAt.get(uuid);
         return at == null ? -1 : System.currentTimeMillis() - at;
     }
 
     /** Millis since the planner last ran, or -1. */
-    long tickAge() {
+    public long tickAge() {
         return lastTickAt == 0 ? -1 : System.currentTimeMillis() - lastTickAt;
     }
 
     /** Duration of the last planner pass in microseconds. */
-    long lastTickMicros() {
+    public long lastTickMicros() {
         return lastTickNanos / 1000;
     }
 
-    private String teamOf(Player player) {
-        try {
-            // The player's own scoreboard first: minigames usually give each player one.
-            Team team = player.getScoreboard().getEntryTeam(player.getName());
-            if (team == null) {
-                team = Bukkit.getScoreboardManager().getMainScoreboard().getEntryTeam(player.getName());
-            }
-            return team == null ? null : team.getName();
-        } catch (RuntimeException e) {
-            // Folia restricts scoreboard access off the global thread.
-            if (scoreboardWarned.compareAndSet(false, true)) {
-                logger.warning("Scoreboard teams are not readable here (" + e + "); set groups through the API instead");
-            }
-            return null;
-        }
-    }
-
-    private CachedPermissions permissionsOf(Player player) {
+    private CachedPermissions permissionsOf(UUID uuid, Predicate<String> check) {
         long now = System.currentTimeMillis();
-        CachedPermissions cached = permissions.get(player.getUniqueId());
+        CachedPermissions cached = permissions.get(uuid);
         if (cached != null && now - cached.at < PERMISSION_REFRESH_MILLIS) {
             return cached;
         }
         int priority = 0;
         for (int level : settings.priorityLevels) {
-            if (player.hasPermission("bvc.priority." + level)) {
+            if (check.test("bvc.priority." + level)) {
                 priority = level;
                 break;
             }
         }
-        cached = new CachedPermissions(priority, player.hasPermission("bvc.broadcast"), now);
-        permissions.put(player.getUniqueId(), cached);
+        cached = new CachedPermissions(priority, check.test("bvc.broadcast"), now);
+        permissions.put(uuid, cached);
         return cached;
     }
 
-    void forget(UUID uuid) {
+    public void forget(UUID uuid) {
         snapshots.remove(uuid);
         sampledAt.remove(uuid);
         permissions.remove(uuid);
@@ -204,7 +182,7 @@ final class VoiceEngine {
 
     // ------------------------------------------------------------------ planner thread
 
-    void tick() {
+    private void tick() {
         long started = System.nanoTime();
         try {
             long now = System.currentTimeMillis();
@@ -236,7 +214,7 @@ final class VoiceEngine {
                 lastFull = now;
             }
         } catch (Throwable error) {
-            logger.log(Level.SEVERE, "Voice planning failed", error);
+            logger.error("Voice planning failed", error);
         } finally {
             lastTickAt = System.currentTimeMillis();
             lastTickNanos = System.nanoTime() - started;
@@ -244,7 +222,7 @@ final class VoiceEngine {
     }
 
     /** Latest decision for a player, or {@code null}. */
-    PlayerPlan planOf(UUID uuid) {
+    public PlayerPlan planOf(UUID uuid) {
         for (PlayerPlan plan : latest.values()) {
             if (plan.uuid.equals(uuid)) {
                 return plan;
@@ -253,11 +231,11 @@ final class VoiceEngine {
         return null;
     }
 
-    PlayerPlan planOf(int id) {
+    public PlayerPlan planOf(int id) {
         return latest.get(id);
     }
 
-    int plannedCount() {
+    public int plannedCount() {
         return latest.size();
     }
 }

@@ -2,6 +2,7 @@
 //
 //   node e2e.js <proxy port> <minecraft version>                        basic transport scenario
 //   node e2e.js <proxy port> <minecraft version> zones <config.yml>     zone rules scenario
+//   node e2e.js <proxy port> <minecraft version> switch <a,b,...>       server switch scenario
 //
 'use strict'
 const mineflayer = require('mineflayer')
@@ -14,6 +15,12 @@ const VERSION = process.argv[3] || '1.21.4'
 const PROTOCOL = 1
 const RCON_PORT = Number(process.env.BVC_RCON_PORT || 25611)
 const RCON_PASSWORD = process.env.BVC_RCON_PASSWORD
+// Name of the proxy's server entry the bots land on.
+const SERVER = process.env.BVC_SERVER || 'lobby'
+// The Nether's key in config.yml: Bukkit uses the world folder, server mods the dimension id.
+const NETHER = process.env.BVC_NETHER_WORLD || 'world_nether'
+// A height in the Nether with room to stand (the roof, y=129, is always clear).
+const NETHER_Y = process.env.BVC_NETHER_Y || '70'
 if (!RCON_PASSWORD) {
     console.error('Set BVC_RCON_PASSWORD to the test server rcon.password')
     process.exit(2)
@@ -210,7 +217,7 @@ async function main () {
     // The sub-server reports the zone; wait until both see proximity mode.
     const stateA = await a.waitFor((p) => p.type === 'VoiceState' && p.mode === 0, 8000, 'VoiceState PROXIMITY')
     const stateB = await b.waitFor((p) => p.type === 'VoiceState' && p.mode === 0, 8000, 'VoiceState PROXIMITY')
-    check('Zone from the sub-server reached both clients', stateA.server === 'lobby' && stateB.radius === 48,
+    check('Zone from the sub-server reached both clients', stateA.server === SERVER && stateB.radius === 48,
       `server=${stateA.server} mode=PROXIMITY radius=${stateB.radius} bitrate=${stateA.bitrate}`)
     const mutedA = await a.waitFor((p) => p.type === 'MuteStatus', 3000, 'MuteStatus')
     check('Mute status pushed (not muted)', mutedA.muted === false)
@@ -408,18 +415,21 @@ async function zones (configPath) {
     check('Back to survival: speaking works again', heard.length === 3)
 
     // ---- per-world zone: the Nether is free mode, the overworld stays proximity
-    fs.writeFileSync(configPath, original.replace(/^worlds: \{\}/m, 'worlds:\n  world_nether:\n    mode: FREE'))
+    fs.writeFileSync(configPath, original.replace(/^worlds: \{\}/m, 'worlds:\n  "' + NETHER + '":\n    mode: FREE'))
     await run('bvcs reload')
-    await run('execute in minecraft:the_nether run tp BotB 0 70 0')
-    await sleep(1200)
+    await run('execute in minecraft:the_nether run tp BotB 0 ' + NETHER_Y + ' 0')
+    // The first visit generates Nether chunks and can stall the server: wait until BotB is
+    // planned in the Nether zone instead of sleeping a fixed time.
+    await b.waitFor((p) => p.type === 'VoiceState' && p.room === NETHER, 15000, 'Nether VoiceState')
+    await sleep(500)
     heard = await speakAndListen(a, b, wa.sessionId)
-    check('World zones: overworld player not heard in the Nether', heard.length === 0)
-    await run('execute in minecraft:the_nether run tp BotA 3000 70 3000')
+    check('World zones: overworld player not heard in the Nether', heard.length === 0, 'heard ' + heard.length)
+    await run('execute in minecraft:the_nether run tp BotA 3000 ' + NETHER_Y + ' 3000')
     await sleep(1200)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('World zones: free mode inside the Nether, 3000 blocks apart -> heard', heard.length === 3 && heard[0].category === 0)
     const netherState = b.packets.filter((p) => p.type === 'VoiceState').pop()
-    check('World zones: client sees the Nether zone', netherState.mode === 2 && netherState.room === 'world_nether',
+    check('World zones: client sees the Nether zone', netherState.mode === 2 && netherState.room === NETHER,
       'room=' + netherState.room)
     await run('tp BotA 0 -60 0')
     await run('tp BotB 2 -60 0')
@@ -438,8 +448,35 @@ ${results.length - failed}/${results.length} checks passed`)
   setTimeout(() => process.exit(failed ? 1 : 0), 300)
 }
 
+// ---------------------------------------------------------------- server switch scenario
+// One bot hops between sub-servers with /server; the zone it receives must come from whichever
+// sub-server it is on (e.g. a Bukkit one and the server mods side by side).
+async function serverSwitch (route) {
+  const bot = new Bot('BotS')
+  try {
+    await bot.hello()
+    bot.sendB(C2P.selectTransport(1))
+    for (const server of route) {
+      if (server !== route[0]) bot.bot.chat('/server ' + server)
+      const state = await bot.waitFor((p) => p.type === 'VoiceState' && p.server === server && p.mode === 0,
+        15000, 'zone from ' + server).catch(() => null)
+      check('Zone from ' + server, state !== null && state.radius === 48, state ? 'radius=' + state.radius : 'none')
+      await sleep(1500)
+    }
+  } catch (e) {
+    check('switch scenario', false, e.message)
+  } finally {
+    bot.quit()
+  }
+  const failed = results.filter((r) => !r.ok).length
+  console.log(`\n${results.length - failed}/${results.length} checks passed`)
+  setTimeout(() => process.exit(failed ? 1 : 0), 300)
+}
+
 if (process.argv[4] === 'zones') {
   zones(process.argv[5])
+} else if (process.argv[4] === 'switch') {
+  serverSwitch((process.argv[5] || 'lobby').split(','))
 } else {
   main()
 }
