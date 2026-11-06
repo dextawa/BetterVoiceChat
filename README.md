@@ -20,9 +20,8 @@
 | Velocity / BungeeCord 适配 | ✅ 完成，已在真实 Velocity 4.3.1、BungeeCord 26.1 上验证端口复用 |
 | 子服插件（范围 / 组队 / 自由麦、按世界设置、旁观者、小游戏 API、Folia） | ✅ 完成，有测试，已在 Velocity + Paper 1.21.4 上端到端验证 |
 | 客户端核心（连接、Opus、混音、3D 方位、按键说话 / 声控） | ✅ 完成，有测试（和 BC 核心在同一进程里联调） |
-| 客户端 Mod 26.3 Fabric / NeoForge | 🚧 能构建出 jar，还没在真实游戏里跑过 |
-| 客户端 Mod 1.16.5、1.18.2、1.19.2、1.19.4、1.20.1 Fabric / Forge；1.20.4–1.21.11、26.1–26.2 Fabric / NeoForge | 🚧 能构建出 jar，还没在真实游戏里跑过 |
-| 客户端 Mod 1.8.9 Forge 及其他版本 | ⏳ 未开始 |
+| 客户端 Mod 1.16.5、1.18.2、1.19.2、1.19.4、1.20.1 Fabric / Forge；1.20.4–1.21.11、26.1–26.3 Fabric / NeoForge（32 个 jar） | ✅ 31 个在真实客户端里进服并连上语音（Velocity + Paper 1.21.4 + ViaVersion/ViaBackwards）；1.16.5 Forge 的开发环境启动即崩（原版代码里的映射问题），静态检查通过，未真机验证 |
+| 客户端 Mod 1.8.9 Forge、1.12.2 | ⏳ 未开始 |
 | 录音、举报、Web 面板 | ⏳ 未开始 |
 
 ## 构建
