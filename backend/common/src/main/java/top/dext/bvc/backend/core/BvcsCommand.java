@@ -19,7 +19,7 @@ import top.dext.bvc.protocol.packet.BackendToProxy.PlayerFlags;
  */
 final class BvcsCommand {
 
-    private static final List<String> SUBCOMMANDS = Arrays.asList("info", "player", "rooms", "reload");
+    private static final List<String> SUBCOMMANDS = Arrays.asList("info", "player", "group", "rooms", "reload");
 
     private final BvcBackend plugin;
 
@@ -33,6 +33,8 @@ final class BvcsCommand {
             info(sender);
         } else if (sub.equals("player") && args.length > 1) {
             player(sender, args[1]);
+        } else if (sub.equals("group") && args.length == 3) {
+            group(sender, args[1], args[2]);
         } else if (sub.equals("rooms")) {
             rooms(sender);
         } else if (sub.equals("reload")) {
@@ -41,9 +43,21 @@ final class BvcsCommand {
         } else {
             send(sender, "&b/bvcs info &7- 连接与区域概况");
             send(sender, "&b/bvcs player <玩家> &7- 查看某个玩家的语音判定");
+            send(sender, "&b/bvcs group <玩家> <组名|none> &7- 设置语音分组（同 API 的 setGroup，Folia 上代替计分板队伍）");
             send(sender, "&b/bvcs rooms &7- 列出插件创建的房间");
             send(sender, "&b/bvcs reload &7- 重新加载配置");
         }
+    }
+
+    private void group(BackendSender sender, String name, String group) {
+        UUID target = plugin.platform().playerByName(name);
+        if (target == null) {
+            send(sender, "&c玩家 " + name + " 不在线。");
+            return;
+        }
+        boolean clear = group.equalsIgnoreCase("none");
+        top.dext.bvc.api.server.BvcServer.get().setGroup(target, clear ? null : group);
+        send(sender, clear ? "&a已清除 " + name + " 的语音分组。" : "&a已把 " + name + " 放进语音分组 " + group + "。");
     }
 
     private void info(BackendSender sender) {
@@ -123,7 +137,7 @@ final class BvcsCommand {
                     out.add(sub);
                 }
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("player")) {
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("player") || args[0].equalsIgnoreCase("group"))) {
             for (String player : plugin.platform().onlinePlayerNames()) {
                 if (player.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))) {
                     out.add(player);

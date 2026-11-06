@@ -59,6 +59,13 @@ e2e.broadcaster:
     bvc.broadcast: true
 ```
 
+## 其他服务端
+
+- **BungeeCord**：BC 端口换成 BungeeCord 的（例如 `node e2e.js 25598 1.21.4`）；Web 面板端口另设（`BVC_WEB_URL`）。
+- **1.8–1.17 的子服**：机器人版本要和子服一致（`node e2e.js 25598 1.8.8`）。脚本会自动换用老版本的命令（`scoreboard teams`），地面高度用 y=4；1.8–1.12 没有跨世界传送命令，按世界设置那一项会跳过。
+- **Folia**：没有 `/team`，设 `BVC_TEAMS=api`，脚本改用 `/bvcs group` 设置分组。
+- **服务端 Mod**：没有权限插件，`priority` 场景不适用。
+
 ## 举报场景
 
 `report.js` 需要 BC 的 Web 面板（默认 `http://127.0.0.1:8790`，可用 `BVC_WEB_URL` 覆盖）和一个面板账号。先在 BC 控制台执行 `bvc web e2eadmin <密码>` 创建账号，再用 `BVC_WEB_PASSWORD` 传入密码（`BVC_WEB_USER` 可改用户名）。为了不等太久，可以在 BC 的 `config.yml` 里把 `reports.before-seconds` / `after-seconds` 调小（例如 30 / 5），`cooldown-seconds` 设成 0。

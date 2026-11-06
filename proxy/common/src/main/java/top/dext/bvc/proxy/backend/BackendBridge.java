@@ -43,6 +43,7 @@ public final class BackendBridge {
     /** Sub-servers whose BackendHello carried a valid proof (only used with a secret). */
     private final Set<String> verified = ConcurrentHashMap.newKeySet();
     private final Set<String> warnedUnverified = ConcurrentHashMap.newKeySet();
+    private final java.util.Map<String, Long> helloRetry = new ConcurrentHashMap<>();
     /** Random per proxy start; tells backends when the proxy forgot their tables. */
     private final long instanceId = new SecureRandom().nextLong();
 
@@ -71,8 +72,21 @@ public final class BackendBridge {
             logger.warn("Bad bvc:server message from " + server + ": " + e.getMessage());
             return;
         }
-        if (!(packet instanceof BackendToProxy.BackendHello) && !secret.get().isEmpty() && !verified.contains(server)) {
-            return; // tables only from a sub-server that proved it knows the secret
+        if (!(packet instanceof BackendToProxy.BackendHello)) {
+            ServerRoutes table = routes.get(server);
+            if (table == null || !table.backendPresent()) {
+                // Tables from a sub-server whose BackendHello never arrived (the server dropped it
+                // before this connection registered bvc:server): ask again, at most every 2 s.
+                long now = System.currentTimeMillis();
+                Long last = helloRetry.get(server);
+                if (last == null || now - last > 2000) {
+                    helloRetry.put(server, now);
+                    sendHello(via);
+                }
+            }
+            if (!secret.get().isEmpty() && !verified.contains(server)) {
+                return; // tables only from a sub-server that proved it knows the secret
+            }
         }
         packet.handle(new Handler(server, via));
     }
@@ -80,11 +94,15 @@ public final class BackendBridge {
     /** The player just finished connecting to {@code server}. */
     public void onPlayerConnected(VoiceSession session, String server) {
         PlatformPlayer player = session.player();
+        sendHello(player);
+        sendBind(player, List.of(session));
+    }
+
+    private void sendHello(PlatformPlayer player) {
         String key = secret.get();
         byte[] proof = key.isEmpty() ? new byte[0] : BvcCrypto.linkProof(key, "proxy", instanceId, 0);
         player.sendToBackend(BvcProtocol.CHANNEL_PROXY,
                 ProxyToBackend.REGISTRY.encode(new ProxyToBackend.ProxyHello(BvcProtocol.VERSION, pluginVersion, instanceId, proof)));
-        sendBind(player, List.of(session));
     }
 
     /** The player's voice connection came up or went down; the backend skips players without voice. */

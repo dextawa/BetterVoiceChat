@@ -3,7 +3,11 @@ package top.dext.bvc.mod.forge;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket;
+//? if >=1.20.2 {
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+//?} else {
+/*import net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket;
+*///?}
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -23,11 +27,20 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 /*import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
-//? if >=1.17 {
-import net.minecraftforge.network.NetworkEvent;
+//? if >=1.20.2 {
+import net.minecraftforge.event.network.CustomPayloadEvent;
+import net.minecraftforge.network.Channel;
+import net.minecraftforge.network.ChannelBuilder;
+import net.minecraftforge.network.EventNetworkChannel;
+//?} else if >=1.18 {
+/*import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.event.EventNetworkChannel;
-//?} else {
+*///?} else if >=1.17 {
+/*import net.minecraftforge.fmllegacy.network.NetworkEvent;
+import net.minecraftforge.fmllegacy.network.NetworkRegistry;
+import net.minecraftforge.fmllegacy.network.event.EventNetworkChannel;
+*///?} else {
 /*import net.minecraftforge.fml.network.NetworkEvent;
 import net.minecraftforge.fml.network.NetworkRegistry;
 import net.minecraftforge.fml.network.event.EventNetworkChannel;
@@ -35,15 +48,20 @@ import net.minecraftforge.fml.network.event.EventNetworkChannel;
 //? if <1.20 {
 /*import net.minecraftforge.fml.ModLoadingContext;
 *///?}
-//? if >=1.17 && <1.20 {
+//? if >=1.18 && <1.20 {
 /*import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.network.NetworkConstants;
+*///?} else if >=1.17 && <1.18 {
+/*import net.minecraftforge.fml.IExtensionPoint;
+import net.minecraftforge.fmllegacy.network.FMLNetworkConstants;
 *///?}
 //? if <1.17 {
 /*import net.minecraftforge.fml.ExtensionPoint;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.network.FMLNetworkConstants;
 import org.apache.commons.lang3.tuple.Pair;
+*///?} else if <1.18 {
+/*import net.minecraftforge.fmlclient.registry.ClientRegistry;
 *///?} else if <1.19 {
 /*import net.minecraftforge.client.ClientRegistry;
 *///?}
@@ -60,6 +78,9 @@ public final class BvcForge {
         //? if <1.17 {
         /*ModLoadingContext.get().registerExtensionPoint(ExtensionPoint.DISPLAYTEST,
                 () -> Pair.of(() -> FMLNetworkConstants.IGNORESERVERONLY, (version, fromServer) -> true));
+        *///?} else if <1.18 {
+        /*ModLoadingContext.get().registerExtensionPoint(IExtensionPoint.DisplayTest.class,
+                () -> new IExtensionPoint.DisplayTest(() -> FMLNetworkConstants.IGNORESERVERONLY, (version, fromServer) -> true));
         *///?} else if <1.20 {
         /*ModLoadingContext.get().registerExtensionPoint(IExtensionPoint.DisplayTest.class,
                 () -> new IExtensionPoint.DisplayTest(() -> NetworkConstants.IGNORESERVERONLY, (version, fromServer) -> true));
@@ -71,12 +92,30 @@ public final class BvcForge {
         BvcModClient client = BvcModClient.init("forge", FMLPaths.CONFIGDIR.get(), payload -> {
             FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer(payload.data().length));
             payload.write(buf);
-            Minecraft.getInstance().getConnection().send(new ServerboundCustomPayloadPacket(BvcPayload.ID, buf));
+            //? if >=1.20.2 {
+            Minecraft.getInstance().getConnection().send(new ServerboundCustomPayloadPacket(payload));
+            //?} else {
+            /*Minecraft.getInstance().getConnection().send(new ServerboundCustomPayloadPacket(BvcPayload.ID, buf));
+            *///?}
         });
 
         // Servers without BVC (and vanilla servers) never announce a version: accept missing.
-        EventNetworkChannel channel = NetworkRegistry.newEventChannel(BvcPayload.ID, () -> "1",
-                NetworkRegistry.acceptMissingOr("1"), NetworkRegistry.acceptMissingOr("1"));
+        //? if >=1.20.2 {
+        EventNetworkChannel channel = ChannelBuilder.named(BvcPayload.ID).optional()
+                .acceptedVersions(Channel.VersionTest.ACCEPT_MISSING.or(Channel.VersionTest.ACCEPT_VANILLA)
+                        .or(Channel.VersionTest.exact(1)))
+                .networkProtocolVersion(1).eventNetworkChannel();
+        channel.addListener((CustomPayloadEvent event) -> {
+            if (!event.getSource().isClientSide()) {
+                return;
+            }
+            BvcPayload payload = BvcPayload.read(event.getPayload());
+            event.getSource().enqueueWork(() -> client.onPayload(payload));
+            event.getSource().setPacketHandled(true);
+        });
+        //?} else {
+        /*EventNetworkChannel channel = NetworkRegistry.newEventChannel(BvcPayload.ID, () -> "1",
+                BvcForgeServer.acceptMissingOr1(), BvcForgeServer.acceptMissingOr1());
         channel.addListener((NetworkEvent.ServerCustomPayloadEvent event) -> {
             // Called on the network thread; the buffer is released afterwards.
             BvcPayload payload = BvcPayload.read(event.getPayload());
@@ -84,6 +123,7 @@ public final class BvcForge {
             context.enqueueWork(() -> client.onPayload(payload));
             context.setPacketHandled(true);
         });
+        *///?}
 
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         //? if >=1.19 {
@@ -104,10 +144,14 @@ public final class BvcForge {
         });
         MinecraftForge.EVENT_BUS.addListener((RenderGameOverlayEvent.Post event) -> {
             if (event.getType() == RenderGameOverlayEvent.ElementType.ALL) {
+                //? if >=1.16 {
                 client.hud().render(event.getMatrixStack());
+                //?} else {
+                /^client.hud().render(null);
+                ^///?}
             }
         });
-        //? if >=1.17 {
+        //? if >=1.18 {
         MinecraftForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggedInEvent event) -> client.onJoin(event.getConnection()));
         //?} else {
         /^MinecraftForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggedInEvent event) -> client.onJoin(event.getNetworkManager()));

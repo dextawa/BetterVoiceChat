@@ -16,6 +16,22 @@ const VERSION = process.argv[3] || '1.21.4'
 const PROTOCOL = 1
 const RCON_PORT = Number(process.env.BVC_RCON_PORT || 25611)
 const RCON_PASSWORD = process.env.BVC_RCON_PASSWORD
+// Servers before 1.13 have different commands and no world below y=0.
+const LEGACY = (() => { const [maj, min] = VERSION.split('.').map(Number); return maj === 1 && min < 13 })()
+/** Ground height of the flat test worlds (the world went down to y=-64 in 1.18). */
+const BEFORE_1_18 = (() => { const [maj, min] = VERSION.split('.').map(Number); return maj === 1 && min < 18 })()
+const GROUND = BEFORE_1_18 ? 4 : -60
+/** `tp <player> <x> <ground> <z>` */
+const tp = (player, x, z) => `tp ${player} ${x} ${GROUND} ${z}`
+/** Scoreboard team commands (renamed in 1.13). Vanilla 1.8–1.12 cannot teleport across worlds, so
+ *  legacy runs skip the per-world checks. */
+// BVC_TEAMS=api: Folia has no /team command; use the BVC group API through /bvcs group instead.
+const TEAM = process.env.BVC_TEAMS === 'api'
+  ? { add: () => 'bvcs info', join: (t, p) => `bvcs group ${p} ${t}`, leave: (p) => `bvcs group ${p} none`, remove: () => 'bvcs info' }
+  : LEGACY
+  ? { add: (t) => `scoreboard teams add ${t}`, join: (t, p) => `scoreboard teams join ${t} ${p}`, leave: (p) => `scoreboard teams leave ${p}`, remove: (t) => `scoreboard teams remove ${t}` }
+  : { add: (t) => `team add ${t}`, join: (t, p) => `team join ${t} ${p}`, leave: (p) => `team leave ${p}`, remove: (t) => `team remove ${t}` }
+
 // Name of the proxy's server entry the bots land on.
 const SERVER = process.env.BVC_SERVER || 'lobby'
 // The Nether's key in config.yml: Bukkit uses the world folder, server mods the dimension id.
@@ -132,7 +148,10 @@ class Bot {
 
   async hello () {
     await this.joined
-    this.client.writeChannel('minecraft:register', ['bvc:voice'])
+    // 1.8–1.12 use the old un-namespaced REGISTER channel; mineflayer only defines a type for it
+    // under the old name, so write the raw payload (channel names separated by NUL).
+    if (this.bot.supportFeature('customChannelIdentifier')) this.client.writeChannel('minecraft:register', ['bvc:voice'])
+    else this.client.write('custom_payload', { channel: 'REGISTER', data: Buffer.from('bvc:voice') })
     this.sendB(C2P.hello())
     this.welcome = await this.waitFor((p) => p.type === 'Welcome', 8000, 'Welcome')
     return this.welcome
@@ -226,8 +245,8 @@ async function main () {
     // Paper remembers positions between runs: put both bots side by side first.
     const rcon = new Rcon(RCON_PORT, RCON_PASSWORD)
     await rcon.connect()
-    await rcon.command('tp BotA 0 -60 0')
-    await rcon.command('tp BotB 2 -60 0')
+    await rcon.command(tp('BotA', 0, 0))
+    await rcon.command(tp('BotB', 2, 0))
     rcon.close()
     // Give the planner a few passes to publish neighbour tables.
     await new Promise((r) => setTimeout(r, 1500))
@@ -334,24 +353,24 @@ async function zones (configPath) {
     b.sendB(C2P.selectTransport(1))
     await a.waitFor((p) => p.type === 'VoiceState' && p.mode === 0, 8000, 'PROXIMITY state')
     await b.waitFor((p) => p.type === 'VoiceState' && p.mode === 0, 8000, 'PROXIMITY state')
-    await run('tp BotA 0 -60 0')
-    await run('tp BotB 3 -60 0')
+    await run(tp('BotA', 0, 0))
+    await run(tp('BotB', 3, 0))
     await sleep(1500)
 
     let heard = await speakAndListen(a, b, wa.sessionId)
     check('Proximity: 3 blocks apart -> heard', heard.length === 3 && heard[0].category === 1)
 
-    await run('tp BotB 300 -60 300')
+    await run(tp('BotB', 300, 300))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Proximity: 300 blocks apart -> silent', heard.length === 0)
 
-    await run('tp BotB 40 -60 0')
+    await run(tp('BotB', 40, 0))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Proximity: 40 blocks (radius 48) -> heard', heard.length === 3)
 
-    await run('tp BotB 0 -60 60')
+    await run(tp('BotB', 0, 60))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Proximity: 60 blocks (radius 48) -> silent', heard.length === 0)
@@ -360,24 +379,24 @@ async function zones (configPath) {
     await run('bvcs reload')
     const teamState = await b.waitFor((p) => p.type === 'VoiceState' && p.mode === 1, 5000, 'TEAM state')
     check('Config reload switches clients to team mode', teamState.mode === 1)
-    await run('tp BotB 1 -60 0')
+    await run(tp('BotB', 1, 0))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Team mode, no teams -> silent even side by side', heard.length === 0)
 
-    await run('team add red')
-    await run('team join red BotA')
-    await run('team join red BotB')
+    await run(TEAM.add('red'))
+    await run(TEAM.join('red', 'BotA'))
+    await run(TEAM.join('red', 'BotB'))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Team mode, same scoreboard team -> heard as group', heard.length === 3 && heard[0].category === 0)
 
-    await run('tp BotB 5000 -60 5000')
+    await run(tp('BotB', 5000, 5000))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Team mode: teammates hear each other at any distance', heard.length === 3)
 
-    await run('team leave BotB')
+    await run(TEAM.leave('BotB'))
     await sleep(1000)
     heard = await speakAndListen(a, b, wa.sessionId)
     check('Team mode: leaving the team -> silent', heard.length === 0)
@@ -393,8 +412,8 @@ async function zones (configPath) {
     setMode('PROXIMITY')
     fs.writeFileSync(configPath, original.replace(/^spectators: \w+/m, 'spectators: SEPARATE'))
     await run('bvcs reload')
-    await run('tp BotA 0 -60 0')
-    await run('tp BotB 2 -60 0')
+    await run(tp('BotA', 0, 0))
+    await run(tp('BotB', 2, 0))
     await run('gamemode spectator BotB')
     await sleep(1200)
     const wb = b.welcome
@@ -416,29 +435,33 @@ async function zones (configPath) {
     check('Back to survival: speaking works again', heard.length === 3)
 
     // ---- per-world zone: the Nether is free mode, the overworld stays proximity
-    fs.writeFileSync(configPath, original.replace(/^worlds: \{\}/m, 'worlds:\n  "' + NETHER + '":\n    mode: FREE'))
-    await run('bvcs reload')
-    await run('execute in minecraft:the_nether run tp BotB 0 ' + NETHER_Y + ' 0')
-    // The first visit generates Nether chunks and can stall the server: wait until BotB is
-    // planned in the Nether zone instead of sleeping a fixed time.
-    await b.waitFor((p) => p.type === 'VoiceState' && p.room === NETHER, 15000, 'Nether VoiceState')
-    await sleep(500)
-    heard = await speakAndListen(a, b, wa.sessionId)
-    check('World zones: overworld player not heard in the Nether', heard.length === 0, 'heard ' + heard.length)
-    await run('execute in minecraft:the_nether run tp BotA 3000 ' + NETHER_Y + ' 3000')
-    await sleep(1200)
-    heard = await speakAndListen(a, b, wa.sessionId)
-    check('World zones: free mode inside the Nether, 3000 blocks apart -> heard', heard.length === 3 && heard[0].category === 0)
-    const netherState = b.packets.filter((p) => p.type === 'VoiceState').pop()
-    check('World zones: client sees the Nether zone', netherState.mode === 2 && netherState.room === NETHER,
-      'room=' + netherState.room)
-    await run('tp BotA 0 -60 0')
-    await run('tp BotB 2 -60 0')
+    if (LEGACY) {
+      console.log('SKIP  World zones (no cross-world teleport before 1.13)')
+    } else {
+      fs.writeFileSync(configPath, original.replace(/^worlds: \{\}/m, 'worlds:\n  "' + NETHER + '":\n    mode: FREE'))
+      await run('bvcs reload')
+      await run('execute in minecraft:the_nether run tp BotB 0 ' + NETHER_Y + ' 0')
+      // The first visit generates Nether chunks and can stall the server: wait until BotB is
+      // planned in the Nether zone instead of sleeping a fixed time.
+      await b.waitFor((p) => p.type === 'VoiceState' && p.room === NETHER, 15000, 'Nether VoiceState')
+      await sleep(500)
+      heard = await speakAndListen(a, b, wa.sessionId)
+      check('World zones: overworld player not heard in the Nether', heard.length === 0, 'heard ' + heard.length)
+      await run('execute in minecraft:the_nether run tp BotA 3000 ' + NETHER_Y + ' 3000')
+      await sleep(1200)
+      heard = await speakAndListen(a, b, wa.sessionId)
+      check('World zones: free mode inside the Nether, 3000 blocks apart -> heard', heard.length === 3 && heard[0].category === 0)
+      const netherState = b.packets.filter((p) => p.type === 'VoiceState').pop()
+      check('World zones: client sees the Nether zone', netherState.mode === 2 && netherState.room === NETHER,
+        'room=' + netherState.room)
+    }
+    await run(tp('BotA', 0, 0))
+    await run(tp('BotB', 2, 0))
   } catch (e) {
     check('zones scenario', false, e.message)
   } finally {
     fs.writeFileSync(configPath, original)
-    try { await run('team remove red'); await run('bvcs reload') } catch (e) { /* best effort */ }
+    try { await run(TEAM.remove('red')); await run('bvcs reload') } catch (e) { /* best effort */ }
     rcon.close()
     a.quit()
     b.quit()
@@ -464,15 +487,16 @@ async function priority () {
     const [wa] = await Promise.all([a.hello(), b.hello()])
     a.sendB(C2P.selectTransport(1))
     b.sendB(C2P.selectTransport(1))
-    await run('tp BotA 0 -60 0')
-    await run('tp BotB 500 -60 500')
+    await run(tp('BotA', 0, 0))
+    await run(tp('BotB', 500, 500))
     // Sub-server permissions are re-read every 5 seconds.
     const state = await a.waitFor((p) => p.type === 'VoiceState' && p.priority > 0 && (p.flags & 2) !== 0, 15000, 'priority state')
     check('Op gets priority and broadcast from the sub-server', state.priority === 200, 'priority=' + state.priority + ' flags=' + state.flags)
     check('Clients get the ducking level', state.ducking > 0, 'ducking=' + state.ducking + ' dB')
 
+    await sleep(1200) // let the sub-server sample the new positions
     let heard = await speakAndListen(a, b, wa.sessionId)
-    check('Far away, normal speech -> not heard', heard.length === 0)
+    check('Far away, normal speech -> not heard', heard.length === 0, heard.length ? 'category=' + heard[0].category : '')
 
     const before = audioFrom(b, wa.sessionId).length
     for (let i = 0; i < 3; i++) { a.sendB(C2P.mic(Date.now() & 0xffff, Buffer.from([0xf8, i]), 1)); await sleep(20) }

@@ -182,6 +182,13 @@ public final class BvcModClient {
         boolean devOpen = devSettingsPending && voice.status().isConnected() && ++devSettingsTicks > 40;
         if (devOpen) {
             devSettingsPending = false;
+            //? if <26.2 {
+            /*if (mc.screen != null) {
+                // Something else is open (e.g. a server resource pack prompt): close it first.
+                LOGGER.info("Dev settings test: closing " + mc.screen.getClass().getName());
+                mc.setScreen(null);
+            }
+            *///?}
         }
         while (devOpen || settingsKey.consumeClick()) {
             devOpen = false;
@@ -206,7 +213,11 @@ public final class BvcModClient {
         Map<UUID, double[]> others = new HashMap<>();
         for (AbstractClientPlayer player : mc.level.players()) {
             if (player != mc.player) {
+                //? if >=1.15 {
                 others.put(player.getUUID(), new double[] {player.getX(), player.getEyeY(), player.getZ()});
+                //?} else {
+                /*others.put(player.getUUID(), new double[] {player.x, player.y + player.getEyeHeight(), player.z});
+                *///?}
             }
         }
         //? if >=1.17 {
@@ -214,7 +225,11 @@ public final class BvcModClient {
         //?} else {
         /*float yaw = mc.player.yRot;
         *///?}
+        //? if >=1.15 {
         voice.positions().update(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), yaw, others);
+        //?} else {
+        /*voice.positions().update(mc.player.x, mc.player.y + mc.player.getEyeHeight(), mc.player.z, yaw, others);
+        *///?}
     }
 
     //? if <1.17 {
@@ -321,7 +336,11 @@ public final class BvcModClient {
 
         @Override
         public int minecraftProtocol() {
+            //? if >=1.16 {
             return SharedConstants.getProtocolVersion();
+            //?} else {
+            /*return SharedConstants.getCurrentVersion().getProtocolVersion();
+            *///?}
         }
 
         @Override

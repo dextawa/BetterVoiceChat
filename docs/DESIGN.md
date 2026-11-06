@@ -333,3 +333,17 @@ BC 和子服各有一个每次启动随机生成的实例 ID，放在 `ProxyHell
 - **子服 API 补充**：`membersOf(room)`（房间里在线的玩家）、`groupOf` / `priorityOf`（读回 API 设置的分组和优先级）、`addListener(VoiceStateListener)`（BC 告诉子服某玩家语音连上 / 断开时通知，来自 `BindPlayers` 里 `voiceEnabled` 的变化、`UnbindPlayers` 和退服）。删除房间后成员回到默认区域，API 设置的分组保留。
 - **BC API 补充**：`VoicePlayer` 增加 `priority()`、`isMicrophoneMuted()`、`isDeafened()`、`transportName()`；`reportService()`（提交、查询、修改举报状态，提交不受冷却限制）；`addListener(VoiceListener)`：`onVoiceConnected`、`onVoiceDisconnected`（退出、A 通道断开）、`onReport`（证据生成完成时，和通知管理员同时）。监听器抛出的异常只记日志，不影响 BVC。
 - 按需求，API 只提供接口；LiteBans、Discord 等联动不在 BVC 里实现。
+
+### 16.12 0.1.0 补全
+
+- **客户端设置界面**：`SettingsModel`（`client/core`）只描述一行行设置和按下后的效果，不依赖 Minecraft；新版用 `VoiceSettingsScreen`，旧版（1.8.9–1.12.2）用 `LegacySettingsScreen`，都是"名字 + `<` + 值"三个按钮一行，翻页显示。改动立即生效并保存。
+- **麦克风测试**：`MicrophoneTest` 不自己打开麦克风，只接收语音采集线程送来的每一帧（显示音量、判断有没有声音、可选回放到扬声器），所以测试时语音照常工作，设备只被打开一次。没进服务器时开始测试，采集会临时打开。第一版曾让测试单独打开麦克风、语音采集让出设备，结果测试期间说不了话，已改掉。
+- **设备名乱码**：Java 8 在中文 Windows 上把设备名的 GBK 字节当成 Latin-1 返回，界面上用系统代码页（`sun.jnu.encoding`）还原显示，设置里仍保存原始名字。
+- **数据库**：`storage.type: MYSQL / MARIADB`，驱动从插件目录的 `lib/` 加载（不打包、不下载）；连接失效（数据库重启、`wait_timeout`）时在下一条语句前重连；MySQL 没有 `CREATE INDEX IF NOT EXISTS`，迁移时去掉 `IF NOT EXISTS`（每个迁移只跑一次）。MariaDB 11.4 实测。
+- **共享密钥**：`ProxyHello` / `BackendHello` 末尾带一个可选字段（旧版本不发也能解析），内容是 `HMAC-SHA256(密钥, 角色 | BC 实例号 | 子服实例号)`。设置密钥后，BC 只接受证明了密钥的子服发来的表，子服也只接受证明了密钥的 BC 的绑定。
+- **面板会话**：会话保存在 `bvc_web_sessions`（只存 Cookie 的 SHA-256），BC 重启后仍然有效。
+- **BungeeCord**：子服对 BC 的第一条 `ProxyHello` 的回复可能在 BungeeCord 还没为这条连接注册 `bvc:server` 时发出而被丢掉，之后 BC 一直认为子服没装插件。现在子服对重复的 `ProxyHello` 也会回复，BC 收到子服的表却还没见过它的 `BackendHello` 时，会重发 `ProxyHello`（最多每 2 秒一次）。
+- **子服 `/bvcs group <玩家> <组名|none>`**：和 API 的 `setGroup` 相同，用于没有 `/team` 的 Folia 和测试。
+- **新增客户端版本**：1.14.4 Forge、1.15.2 Fabric / Forge、1.17.1 Fabric / Forge、1.20.2 Fabric / Forge（新版构建，共 39 个），1.9.4、1.10.2、1.11.2 Forge（旧版构建，共 5 个）。1.15 之前没有 `PoseStack` 和 `Component` 按钮文字，HUD 和设置界面用 `<1.16` 分支画字符串。1.13.x 不做（没有 Fabric，Forge 只有测试版）。新版构建按加载器只声明需要的 maven，避免某个加载器的仓库挂掉影响其他版本；旧版 Forge 的开发客户端用它们原本的 Java（1.14–1.16 用 8，1.17 用 17）运行。
+- **发布**：版本号 0.1.0；`tools/release.sh` 构建全部并收集到 `dist/0.1.0/`，附 `SHA256SUMS`。
+- **测试（2026-11-07）**：BungeeCord 26.1 + Paper 1.21.4 上基础 13、规则 18、优先级 7、举报 9 项全部通过；Paper 1.8.8 上基础 13、规则 15（跳过按世界设置）、优先级 7；Folia 1.21.4 上 13 / 18 / 7；Forge 1.17.1 服务端 Mod 上基础 13、规则 18。真实客户端（经 Velocity 自动进服、打开设置界面、逐项切换、跑麦克风测试）：44 个 jar 中 42 个通过，1.16.5 Forge 和 1.17.1 Forge 因为构建工具的开发环境启动不了而没测。测试中发现并修好：1.10.2 Forge 把自己报成 Minecraft "1.10"，原来的版本范围 `[1.10.2]` 会拒绝加载，改为 `[1.10,1.10.2]`；1.17.1 Fabric 的依赖名应为 `fabric`（1.18 起才是 `fabric-api`）。

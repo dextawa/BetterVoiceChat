@@ -3,9 +3,9 @@ package top.dext.bvc.mod;
 import java.util.ArrayList;
 import java.util.List;
 
-//? if <1.20 {
+//? if >=1.16 && <1.20 {
 /*import com.mojang.blaze3d.vertex.PoseStack;
-*///?} else if <1.20.2 {
+*///?} else if >=1.20 && <1.20.2 {
 /*import net.minecraft.client.gui.GuiGraphics;
 *///?}
 import net.minecraft.client.gui.components.Button;
@@ -95,15 +95,23 @@ public final class VoiceSettingsScreen extends Screen {
 
     private void refresh() {
         for (int i = 0; i < valueButtons.size(); i++) {
-            valueButtons.get(i).setMessage(valueOf(shownRows.get(i)));
+            setMessage(valueButtons.get(i), valueOf(shownRows.get(i)));
         }
         if (hint != null) {
             String key = model.testStatusKey();
             hint.visible = key != null;
             if (key != null) {
-                hint.setMessage(VoiceHud.tr(key));
+                setMessage(hint, VoiceHud.tr(key));
             }
         }
+    }
+
+    private static void setMessage(Button button, Component text) {
+        //? if >=1.16 {
+        button.setMessage(text);
+        //?} else {
+        /*button.setMessage(text.getColoredString());
+        *///?}
     }
 
     @Override
@@ -158,7 +166,13 @@ public final class VoiceSettingsScreen extends Screen {
         return false;
     }
 
-    //? if <1.20 {
+    //? if <1.16 {
+    /*@Override
+    public void render(int mouseX, int mouseY, float delta) {
+        renderBackground();
+        super.render(mouseX, mouseY, delta);
+    }
+    *///?} else if <1.20 {
     /*@Override
     public void render(PoseStack graphics, int mouseX, int mouseY, float delta) {
         renderBackground(graphics);
@@ -191,8 +205,10 @@ public final class VoiceSettingsScreen extends Screen {
     private static Button button(int x, int y, int w, Component text, Button.OnPress onPress) {
         //? if >=1.19.4 {
         return Button.builder(text, onPress).bounds(x, y, w, 20).build();
-        //?} else {
+        //?} else if >=1.16 {
         /*return new Button(x, y, w, 20, text, onPress);
+        *///?} else {
+        /*return new Button(x, y, w, 20, text.getColoredString(), onPress);
         *///?}
     }
 }

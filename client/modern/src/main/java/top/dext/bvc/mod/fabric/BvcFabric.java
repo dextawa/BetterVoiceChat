@@ -71,8 +71,10 @@ public final class BvcFabric implements ClientModInitializer {
 
         //? if >=1.21.6 {
         HudElementRegistry.addLast(BvcModClient.id("hud"), (graphics, delta) -> client.hud().render(graphics));
-        //?} else {
+        //?} else if >=1.16 {
         /*HudRenderCallback.EVENT.register((graphics, delta) -> client.hud().render(graphics));
+        *///?} else {
+        /*HudRenderCallback.EVENT.register(delta -> client.hud().render(null));
         *///?}
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> client.onJoin(handler.getConnection()));

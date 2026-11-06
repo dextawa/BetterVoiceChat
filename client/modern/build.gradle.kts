@@ -21,9 +21,13 @@ version = "${prop("mod.version")}+$minecraftVersion-$loader"
 base.archivesName.set("BetterVoiceChat")
 
 repositories {
-    maven("https://maven.neoforged.net/releases/")
+    // Only the repositories this node's loader needs, so one loader's maven being slow or down
+    // never blocks the others.
     maven("https://maven.fabricmc.net/")
-    maven("https://maven.minecraftforge.net/")
+    when (loader) {
+        "neoforge" -> maven("https://maven.neoforged.net/releases/")
+        "forge" -> maven("https://maven.minecraftforge.net/")
+    }
 }
 
 // Libraries copied into the Forge / NeoForge mod jar (resolved with their dependencies).
@@ -91,6 +95,17 @@ loom.runs.named("client") {
     if (findProperty("bvc.devSettings") != null) vmArgs("-Dbvc.devSettings=true")
 }
 
+// Old Forge dev runs need the Java they shipped with: 1.14–1.16 use Nashorn and the Java 8 class
+// loader, 1.17 refuses Java 21.
+if (loader == "forge" && stonecutter.eval(minecraftVersion, "<1.18")) {
+    val runJava = if (stonecutter.eval(minecraftVersion, "<1.17")) 8 else 17
+    tasks.withType<JavaExec>().configureEach {
+        javaLauncher.set(project.extensions.getByType<JavaToolchainService>().launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(runJava))
+        })
+    }
+}
+
 // Each node only has its own loader on the classpath: compile only that loader's entry point.
 val otherLoaders = listOf("fabric", "neoforge", "forge") - loader
 tasks.named<JavaCompile>("compileJava") {
@@ -111,7 +126,7 @@ tasks.named<ProcessResources>("processResources") {
         "fabricRange" to ">=$low <=$high",
         // Maven ranges reject identical boundaries: a single version is written "[x]".
         // Fabric API's mod id was "fabric" before 1.17.
-        "fabricApiId" to if (stonecutter.eval(minecraftVersion, "<1.17")) "fabric" else "fabric-api",
+        "fabricApiId" to if (stonecutter.eval(minecraftVersion, "<1.18")) "fabric" else "fabric-api",
         "forgeRange" to if (low == high) "[$low]" else "[$low,$high]",
     )
     inputs.properties(props)

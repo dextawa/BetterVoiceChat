@@ -6,12 +6,16 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 //?} else if >=1.20 {
 /*import net.minecraft.client.gui.GuiGraphics;
-*///?} else {
+*///?} else if >=1.16 {
 /*import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
+*///?} else {
+/*import net.minecraft.client.gui.GuiComponent;
 *///?}
 import net.minecraft.network.chat.Component;
+//? if >=1.16 {
 import net.minecraft.network.chat.MutableComponent;
+//?}
 //? if <1.19 {
 /*import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
@@ -47,8 +51,10 @@ public final class VoiceHud {
     public void render(GuiGraphicsExtractor graphics) {
     //?} else if >=1.20 {
     /*public void render(GuiGraphics graphics) {
-    *///?} else {
+    *///?} else if >=1.16 {
     /*public void render(PoseStack graphics) {
+    *///?} else {
+    /*public void render(Object graphics) {
     *///?}
         Minecraft mc = Minecraft.getInstance();
         // F1 (hidden HUD) is handled by the game: HUD layers are not drawn at all then.
@@ -60,7 +66,11 @@ public final class VoiceHud {
             return;
         }
         Font font = mc.font;
+        //? if >=1.15 {
         int height = mc.getWindow().getGuiScaledHeight();
+        //?} else {
+        /*int height = mc.window.getGuiScaledHeight();
+        *///?}
         int y = height - 38 - font.lineHeight * 2;
 
         Line state = stateLine(status);
@@ -159,27 +169,42 @@ public final class VoiceHud {
     private static void drawBoxed(GuiGraphicsExtractor graphics, Font font, Component text, int x, int y, int color) {
     //?} else if >=1.20 {
     /*private static void drawBoxed(GuiGraphics graphics, Font font, Component text, int x, int y, int color) {
-    *///?} else {
+    *///?} else if >=1.16 {
     /*private static void drawBoxed(PoseStack graphics, Font font, Component text, int x, int y, int color) {
+    *///?} else {
+    /*private static void drawBoxed(Object graphics, Font font, Component text, int x, int y, int color) {
     *///?}
+        //? if >=1.16 {
         int width = font.width(text);
+        //?} else {
+        /*String string = text.getColoredString();
+        int width = font.width(string);
+        *///?}
         //? if >=1.20 {
         graphics.fill(x - 2, y - 2, x + width + 2, y + font.lineHeight, BACKGROUND);
-        //?} else {
+        //?} else if >=1.16 {
         /*GuiComponent.fill(graphics, x - 2, y - 2, x + width + 2, y + font.lineHeight, BACKGROUND);
+        *///?} else {
+        /*GuiComponent.fill(x - 2, y - 2, x + width + 2, y + font.lineHeight, BACKGROUND);
         *///?}
         //? if >=26 {
         graphics.text(font, text, x, y, color, false);
         //?} else if >=1.20 {
         /*graphics.drawString(font, text, x, y, color, false);
-        *///?} else {
+        *///?} else if >=1.16 {
         /*font.draw(graphics, text, x, y, color);
+        *///?} else {
+        /*font.draw(string, x, y, color);
         *///?}
     }
 
     // Text components: 1.19 replaced TextComponent / TranslatableComponent with factory methods.
 
+    //? if >=1.16 {
     static MutableComponent literal(String text) {
+    //?} else {
+    /*static Component literal(String text) {
+    *///?}
         //? if >=1.19 {
         return Component.literal(text);
         //?} else {
@@ -187,7 +212,11 @@ public final class VoiceHud {
         *///?}
     }
 
+    //? if >=1.16 {
     static MutableComponent tr(String key, Object... args) {
+    //?} else {
+    /*static Component tr(String key, Object... args) {
+    *///?}
         //? if >=1.19 {
         return Component.translatable(key, args);
         //?} else {

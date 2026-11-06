@@ -12,6 +12,8 @@ pluginManagement {
 
 plugins {
     id("dev.kikugie.stonecutter") version "0.9.8"
+    // Downloads the JDK 8 / 17 that old Forge dev clients run on.
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 // One node per Minecraft version and loader; all nodes share src/. Loader-specific code is
@@ -20,11 +22,16 @@ stonecutter {
     create(rootProject) {
         fun mc(version: String, vararg loaders: String) = loaders.forEach { version("$version-$it", version) }
 
+        // 1.14 Fabric API has no HUD callback: Forge only.
+        mc("1.14.4", "forge")
+        mc("1.15.2", "fabric", "forge")
         mc("1.16.5", "fabric", "forge")
+        mc("1.17.1", "fabric", "forge")
         mc("1.18.2", "fabric", "forge")
         mc("1.19.2", "fabric", "forge")
         mc("1.19.4", "fabric", "forge")
         mc("1.20.1", "fabric", "forge")
+        mc("1.20.2", "fabric", "forge")
         mc("1.20.4", "fabric", "neoforge")
         mc("1.20.6", "fabric", "neoforge")
         mc("1.21.1", "fabric", "neoforge")

@@ -158,8 +158,13 @@ public final class BvcModServer implements BackendPlatform {
             team = playerTeam == null ? null : playerTeam.getName();
         }
         // Mods have no permission plugin: priority and broadcast come from the API only.
+        //? if >=1.15 {
         backend.sample(player.getUUID(), dimensionOf(player), player.getX(), player.getY(), player.getZ(),
                 player.isSpectator(), team, permission -> false);
+        //?} else {
+        /*backend.sample(player.getUUID(), dimensionOf(player), player.x, player.y, player.z,
+                player.isSpectator(), team, permission -> false);
+        *///?}
     }
 
     /** The dimension id, e.g. {@code minecraft:the_nether}; {@code worlds:} in config.yml uses it. */
@@ -170,8 +175,10 @@ public final class BvcModServer implements BackendPlatform {
         /*return player.level().dimension().location().toString();
         *///?} else if >=1.20 {
         /*return player.serverLevel().dimension().location().toString();
-        *///?} else {
+        *///?} else if >=1.16 {
         /*return player.getLevel().dimension().location().toString();
+        *///?} else {
+        /*return net.minecraft.world.level.dimension.DimensionType.getName(player.dimension).toString();
         *///?}
     }
 

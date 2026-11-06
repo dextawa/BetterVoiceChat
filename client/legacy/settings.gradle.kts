@@ -19,7 +19,7 @@ rootProject.name = "bettervoicechat-legacy"
 // One project per Minecraft version. The APIs differ too much (MCP names, text components,
 // rendering) for comment-based preprocessing to pay off; shared, Minecraft-free code lives in
 // common/.
-include("1.8.9", "1.12.2")
+include("1.8.9", "1.9.4", "1.10.2", "1.11.2", "1.12.2")
 
 // The Minecraft-independent client core comes straight from the main build.
 includeBuild("../..") {

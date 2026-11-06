@@ -5,7 +5,7 @@
 - 只用 TCP，和 Minecraft **共用同一个端口**，不额外开放 UDP 端口，继承现有 CDN / 高防
 - 服务器决定语音模式（范围麦 / 组队麦 / 自由麦），支持按键说话
 - BC 统一禁麦：单人、单个子服、全服，可定时；只提供 API 接口，LiteBans 等插件可自行对接
-- 滚动录音（总量上限 1GB）+ 举报证据包 + Web 面板审核（开发中）
+- 滚动录音（总量上限 1GB）+ 举报证据包 + Web 面板审核
 - 指挥优先级、自动压低他人音量、子服内广播
 - 声音永远不跨子服
 
@@ -13,26 +13,41 @@
 
 ## 当前进度
 
+版本 0.1.0。各部分都有单元测试；“实测”指在真实服务端 / 真实客户端里跑过端到端测试（`tools/e2e`）。
+
 | 部分 | 状态 |
 |---|---|
-| 协议（包格式、端口复用握手、加密） | ✅ 完成，有测试 |
-| BC 核心（会话、鉴权、A/B 传输、查表转发、禁麦、指令、API） | ✅ 完成，有测试 |
-| Velocity / BungeeCord 适配 | ✅ 完成，已在真实 Velocity 4.3.1、BungeeCord 26.1 上验证端口复用 |
-| 子服插件（范围 / 组队 / 自由麦、按世界设置、旁观者、小游戏 API、Folia） | ✅ 完成，有测试，已在 Velocity + Paper 1.21.4 上端到端验证 |
-| 服务端 Mod（子服插件的同一套逻辑，装在 Fabric / NeoForge / Forge 独立服务端上；和客户端 Mod 是同一个 jar） | ✅ 32 个版本都能构建；Fabric 1.21.4 / 1.20.1、NeoForge 1.21.4、Forge 1.20.1 在 Velocity 后面端到端通过（基础 13 项、规则 18 项），真实客户端能连上语音，Paper 和 Mod 子服之间换服正常。已知问题：NeoForge 1.21.4 服务端经过 Velocity 时，装了 NeoForge 的客户端会被断开（Velocity 4.3.1 解析不了服务端发来的命令列表包；服务端不装 BVC 也一样）；NeoForge 1.20.4 服务端经过 Velocity 时会踢掉原版客户端（去掉 Velocity 上的 BVC 插件也一样，直连正常；还没确认和服务端 Mod 有没有关系） |
-| 客户端核心（连接、Opus、混音、3D 方位、按键说话 / 声控） | ✅ 完成，有测试（和 BC 核心在同一进程里联调） |
-| 客户端 Mod 1.16.5、1.18.2、1.19.2、1.19.4、1.20.1 Fabric / Forge；1.20.4–1.21.11、26.1–26.3 Fabric / NeoForge（32 个 jar） | ✅ 31 个在真实客户端里进服并连上语音（Velocity + Paper 1.21.4 + ViaVersion/ViaBackwards）；1.16.5 Forge 的开发环境启动即崩（原版代码里的映射问题），静态检查通过，未真机验证 |
-| 客户端 Mod 1.8.9、1.12.2 Forge | ✅ 在真实客户端里进服并连上语音（同一测试环境，另装 ViaRewind） |
-| 优先级 / 广播 / 闪避、房间 API、对外接口（M6） | ✅ 完成，有测试；优先级和广播在 Velocity + Paper 1.21.4 上端到端验证 |
-| 录音、举报、Web 面板 | ✅ 完成，有测试；在 Velocity + Paper 1.21.4 上端到端验证（机器人说真实 Opus → `/vreport` → 面板里查看证据、回放、处理、禁麦、审计），回放用 ffmpeg 和 Chrome 解码验证 |
+| 协议（包格式、端口复用握手、加密） | ✅ |
+| BC 插件：Velocity | ✅ 实测（Velocity 4.3.1）：基础、规则、优先级 / 广播、换服、举报与 Web 面板 |
+| BC 插件：BungeeCord | ✅ 实测（BungeeCord 26.1）：基础、规则、优先级 / 广播、举报与 Web 面板 |
+| 子服插件：Paper / Spigot | ✅ 实测：Paper 1.21.4、Paper 1.8.8（1.8 上没有跨世界传送命令，按世界设置那一项跳过） |
+| 子服插件：Folia | ✅ 实测：Folia 1.21.4（Folia 没有 `/team`，组队用 API / `/bvcs group` 测） |
+| 服务端 Mod（和客户端 Mod 同一个 jar） | ✅ 实测：Fabric 1.21.4 / 1.20.1、NeoForge 1.21.4、Forge 1.20.1 / 1.17.1 |
+| 数据库 | ✅ H2（默认）；MariaDB 11.4 实测（禁言、举报、录音索引、面板账号和会话都写入成功，数据库重启后自动重连） |
+| 客户端：设置界面、选择麦克风 / 扬声器、麦克风测试、单人音量 | ✅ 实测（在真实客户端里自动打开设置界面、逐项切换、跑麦克风测试，测试期间语音不断） |
+| 客户端 Mod 1.14.4 Forge；1.15.2、1.16.5、1.17.1、1.18.2、1.19.2、1.19.4、1.20.1、1.20.2 Fabric / Forge；1.20.4–1.21.11、26.1–26.3 Fabric / NeoForge（39 个 jar） | ✅ 37 个实测：真实客户端经 Velocity 进服、连上语音、打开设置界面逐项切换、跑麦克风测试且语音不断。1.16.5 Forge、1.17.1 Forge 见已知问题 |
+| 客户端 Mod 1.8.9、1.9.4、1.10.2、1.11.2、1.12.2 Forge（5 个 jar） | ✅ 5 个全部实测（同上） |
+| 录音、举报、Web 面板 | ✅ 实测（Velocity 和 BungeeCord 上，机器人说真实 Opus → `/vreport` → 面板查看证据、回放、处理、禁麦、审计） |
+| 优先级 / 广播 / 闪避、房间 API、对外接口 | ✅ 实测 |
+| BC 和子服之间的共享密钥、面板登录重启后保留 | ✅（单元测试） |
+
+### 已知问题
+
+- 1.13.x 没有客户端 Mod：1.13 没有 Fabric，Forge 1.13.2 只有测试版，构建工具不支持。
+- 1.14.4 只有 Forge：1.14 的 Fabric API 没有 HUD 接口。
+- 1.16.5 Forge、1.17.1 Forge 的客户端没在真实客户端里跑过：构建工具的开发环境启动不了这两个版本（1.16.5 在原版代码里崩，1.17.1 找不到 NightConfig），和 BVC 的代码无关。它们和旁边已实测的版本（1.15.2 Forge、1.18.2 Forge）走同一套代码；1.17.1 Forge 作为服务端 Mod 已实测。
+- NeoForge 1.21.4 服务端放在 Velocity 后面时，装了 NeoForge 的客户端会被断开（Velocity 解析不了服务端发来的命令列表，服务端不装 BVC 也一样）；NeoForge 1.20.4 服务端放在 Velocity 后面时会踢掉原版客户端（直连正常）。
+- 服务端 Mod 没有权限插件：优先级和广播只能通过 API 设置，`/bvcs` 需要 2 级 OP。
 
 ## 构建
 
-需要 JDK 21 或更新版本。
+需要 JDK 21（26.x 客户端还需要 JDK 25；旧版 Forge 需要的 JDK 8 / 17 由 Gradle 自动下载）。
 
 ```bash
-./gradlew build
+tools/release.sh
 ```
+
+会构建所有插件和 Mod，并把 jar 收集到 `dist/<版本>/`：`proxy/`（BC 插件）、`server/`（子服插件）、`mods/`（客户端 / 服务端 Mod，每个 Minecraft 版本和加载器一个）、API jar，以及 `SHA256SUMS`。只想编译插件可以用 `./gradlew build`。
 
 产物：
 
@@ -40,6 +55,15 @@
 - `proxy/bungee/build/libs/BetterVoiceChat-Bungee-*.jar`（BungeeCord，Java 17+）
 - `backend/bukkit/build/libs/BetterVoiceChat-Bukkit-*.jar`（每个子服装一个；Spigot / Paper / Folia，1.8+）
 - Mod 子服（Fabric / NeoForge / Forge 独立服务端）：直接装客户端 Mod 的 jar（见 `client/modern`），它在独立服务端上会以子服的身份运行，配置在 `config/bettervoicechat/config.yml`，按世界设置时世界名写维度 ID（如 `"minecraft:the_nether"`）。Mod 子服没有权限插件，`bvc.priority.*` / `bvc.broadcast` 只能通过 API 设置；`/bvcs` 需要 2 级 OP。
+
+### 数据库和安全
+
+- BC 默认用内置的 H2。要用 MySQL / MariaDB，把 JDBC 驱动（`mysql-connector-j` 或 `mariadb-java-client` 的 jar）放进 BC 插件目录的 `lib/` 文件夹，然后在 BC 的 `config.yml` 里设置 `storage.type: MYSQL`（或 `MARIADB`）和连接信息。切换数据库不会迁移旧数据。
+- 在 BC 的 `security.backend-secret` 和每个子服的 `backend-secret` 里设成同一个值后，BC 只接受知道密钥的子服发来的语音规则，子服也只听知道密钥的 BC。用于防止有人绕过 BC 直连子服冒充 BC。
+
+### 客户端
+
+默认按 K 打开设置：说话方式、声控灵敏度（显示当前音量）、麦克风增益、语音音量、选择麦克风和扬声器、测试麦克风（可以听到自己）、HUD 开关、单独调某个玩家的音量或屏蔽。设置保存在 `config/bettervoicechat.properties`。
 
 子服的语音规则在子服的 `plugins/BetterVoiceChat/config.yml` 里设置（范围麦 / 组队麦 / 自由麦、半径、只允许按键说话、按世界设置、旁观者），BC 的设置在 BC 的 `plugins/bettervoicechat/config.yml`（Velocity）或 `plugins/BetterVoiceChat/config.yml`（BungeeCord）里（传输方式、是否强制装 Mod、码率）。
 

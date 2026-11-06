@@ -171,18 +171,21 @@ public final class ProxyLink {
                 return;
             }
             proxyVersion = packet.pluginVersion;
+            boolean known;
             synchronized (ProxyLink.this) {
-                if (proxySeen && proxyInstance == packet.instanceId) {
-                    return;
-                }
+                known = proxySeen && proxyInstance == packet.instanceId;
                 proxySeen = true;
                 proxyInstance = packet.instanceId;
             }
+            // Always answer, even a repeat: the server may have dropped the previous reply because
+            // the proxy had not registered bvc:server on that connection yet (BungeeCord).
             byte[] proof = key.isEmpty() ? new byte[0] : BvcCrypto.linkProof(key, "backend", packet.instanceId, instanceId);
             send(via, new BackendToProxy.BackendHello(BvcProtocol.VERSION, pluginVersion,
                     software, instanceId, proof));
-            resyncRequested.set(true);
-            logger.info("Linked with BetterVoiceChat proxy " + packet.pluginVersion);
+            if (!known) {
+                resyncRequested.set(true);
+                logger.info("Linked with BetterVoiceChat proxy " + packet.pluginVersion);
+            }
         }
 
         @Override
