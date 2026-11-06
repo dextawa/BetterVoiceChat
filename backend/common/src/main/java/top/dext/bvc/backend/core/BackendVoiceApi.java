@@ -1,5 +1,6 @@
 package top.dext.bvc.backend.core;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -8,6 +9,7 @@ import java.util.UUID;
 
 import top.dext.bvc.api.MuteScope;
 import top.dext.bvc.api.server.BvcServerApi;
+import top.dext.bvc.api.server.VoiceStateListener;
 import top.dext.bvc.api.server.ZoneSettings;
 import top.dext.bvc.backend.voice.PlayerOverrides;
 import top.dext.bvc.protocol.packet.BackendToProxy;
@@ -20,10 +22,59 @@ final class BackendVoiceApi implements BvcServerApi {
 
     private final VoiceEngine engine;
     private final ProxyLink link;
+    private final Map<VoiceStateListener, java.util.function.BiConsumer<UUID, Boolean>> listeners =
+            new java.util.concurrent.ConcurrentHashMap<VoiceStateListener, java.util.function.BiConsumer<UUID, Boolean>>();
 
     BackendVoiceApi(VoiceEngine engine, ProxyLink link) {
         this.engine = engine;
         this.link = link;
+    }
+
+    @Override
+    public Set<UUID> membersOf(String room) {
+        Set<UUID> out = new HashSet<UUID>();
+        if (room == null || !engine.rooms.containsKey(room)) {
+            return out;
+        }
+        for (Map.Entry<UUID, PlayerOverrides> entry : engine.overrides.entrySet()) {
+            if (room.equals(entry.getValue().room) && link.isOnline(entry.getKey())) {
+                out.add(entry.getKey());
+            }
+        }
+        return out;
+    }
+
+    @Override
+    public Optional<String> groupOf(UUID player) {
+        PlayerOverrides overrides = engine.overrides.get(player);
+        return overrides == null ? Optional.<String>empty() : Optional.ofNullable(overrides.group);
+    }
+
+    @Override
+    public int priorityOf(UUID player) {
+        PlayerOverrides overrides = engine.overrides.get(player);
+        return overrides == null ? 0 : overrides.priority;
+    }
+
+    @Override
+    public void addListener(final VoiceStateListener listener) {
+        java.util.function.BiConsumer<UUID, Boolean> bridge = new java.util.function.BiConsumer<UUID, Boolean>() {
+            @Override
+            public void accept(UUID player, Boolean hasVoice) {
+                listener.onVoiceChanged(player, hasVoice);
+            }
+        };
+        if (listeners.putIfAbsent(listener, bridge) == null) {
+            link.addVoiceListener(bridge);
+        }
+    }
+
+    @Override
+    public void removeListener(VoiceStateListener listener) {
+        java.util.function.BiConsumer<UUID, Boolean> bridge = listeners.remove(listener);
+        if (bridge != null) {
+            link.removeVoiceListener(bridge);
+        }
     }
 
     @Override

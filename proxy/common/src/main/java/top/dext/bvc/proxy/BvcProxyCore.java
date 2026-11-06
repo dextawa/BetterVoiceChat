@@ -17,6 +17,8 @@ import top.dext.bvc.api.MuteScope;
 import top.dext.bvc.api.MuteService;
 import top.dext.bvc.api.proxy.BvcProxy;
 import top.dext.bvc.api.proxy.BvcProxyApi;
+import top.dext.bvc.api.proxy.ReportService;
+import top.dext.bvc.api.proxy.VoiceListener;
 import top.dext.bvc.api.proxy.VoicePlayer;
 import top.dext.bvc.protocol.BvcProtocol;
 import top.dext.bvc.protocol.ProtocolException;
@@ -68,6 +70,7 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
     private final RouteRegistry routes = new RouteRegistry();
     private final AtomicInteger pendingStreams = new AtomicInteger();
     private final List<ProxyPlatform.Cancellable> tasks = new ArrayList<>();
+    private final List<VoiceListener> voiceListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private volatile BvcConfig config;
     private volatile Messages messages;
@@ -226,9 +229,14 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
     }
 
     public void onPlayerQuit(PlatformPlayer player) {
+        VoiceSession current = sessions.get(player.uuid());
+        boolean hadVoice = current != null && current.isVoiceConnected();
         VoiceSession session = sessions.remove(player.uuid());
         if (session == null) {
             return;
+        }
+        if (hadVoice) {
+            fire(listener -> listener.onVoiceDisconnected(session));
         }
         routes.removeEverywhere(session.id(), null);
         byte[] remove = ProxyToClient.REGISTRY.encode(new ProxyToClient.PlayerRemove(new int[] {session.id()}));
@@ -303,6 +311,7 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         if (session.detachStream(connection)) {
             logger.debug(session.name() + " lost the voice stream");
             backend.onVoiceChanged(session);
+            fire(listener -> listener.onVoiceDisconnected(session));
         }
     }
 
@@ -311,6 +320,7 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         router.pushVoiceState(session);
         router.pushMuteStatus(session);
         backend.onVoiceChanged(session);
+        fire(listener -> listener.onVoiceConnected(session));
     }
 
     // ------------------------------------------------------------------ client packets
@@ -504,6 +514,34 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
             }
         }
         platform.console().sendMessage(text);
+        fire(listener -> listener.onReport(ReportApi.view(report)));
+    }
+
+    private void fire(java.util.function.Consumer<VoiceListener> event) {
+        for (VoiceListener listener : voiceListeners) {
+            try {
+                event.accept(listener);
+            } catch (RuntimeException e) {
+                logger.error("A BetterVoiceChat listener failed", e);
+            }
+        }
+    }
+
+    @Override
+    public ReportService reportService() {
+        return new ReportApi(reports, clock);
+    }
+
+    @Override
+    public void addListener(VoiceListener listener) {
+        if (listener != null && !voiceListeners.contains(listener)) {
+            voiceListeners.add(listener);
+        }
+    }
+
+    @Override
+    public void removeListener(VoiceListener listener) {
+        voiceListeners.remove(listener);
     }
 
     // ------------------------------------------------------------------ API + accessors

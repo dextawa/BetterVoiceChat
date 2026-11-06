@@ -48,11 +48,20 @@ public interface BvcServerApi {
 
     Optional<String> roomOf(UUID player);
 
+    /** Online players currently put in {@code room} through {@link #setRoom}. */
+    Set<UUID> membersOf(String room);
+
     /** Overrides the team used by team modes, or restores the scoreboard team with {@code null}. */
     void setGroup(UUID player, String group);
 
+    /** The group set through {@link #setGroup}, if any (scoreboard teams are not included). */
+    Optional<String> groupOf(UUID player);
+
     /** Speaker priority 0-255 on this sub-server; the proxy uses the higher of this and its own. */
     void setPriority(UUID player, int priority);
+
+    /** The priority set through {@link #setPriority}, 0 if none. */
+    int priorityOf(UUID player);
 
     void setCanSpeak(UUID player, boolean canSpeak);
 
@@ -75,4 +84,8 @@ public interface BvcServerApi {
 
     /** {@code scope} {@code null} = this sub-server. */
     void unmute(UUID player, MuteScope scope, String operator);
+
+    void addListener(VoiceStateListener listener);
+
+    void removeListener(VoiceStateListener listener);
 }

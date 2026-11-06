@@ -110,6 +110,17 @@ public final class VoiceSession implements VoicePlayer {
         return modVersion;
     }
 
+    @Override
+    public int priority() {
+        return proxyPriority;
+    }
+
+    @Override
+    public String transportName() {
+        Transport current = transport;
+        return state == State.CONNECTED && current != null ? current.name() : null;
+    }
+
     public State state() {
         return state;
     }
@@ -303,10 +314,12 @@ public final class VoiceSession implements VoicePlayer {
         this.server = server;
     }
 
+    @Override
     public boolean isDeafened() {
         return deafened;
     }
 
+    @Override
     public boolean isMicrophoneMuted() {
         return microphoneMuted;
     }

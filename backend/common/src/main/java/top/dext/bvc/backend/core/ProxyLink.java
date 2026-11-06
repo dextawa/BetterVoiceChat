@@ -1,10 +1,13 @@
 package top.dext.bvc.backend.core;
 
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 import top.dext.bvc.protocol.BvcProtocol;
 import top.dext.bvc.protocol.ProtocolException;
@@ -40,6 +43,9 @@ public final class ProxyLink {
     private final AtomicBoolean resyncRequested = new AtomicBoolean(true);
     private final AtomicBoolean versionWarned = new AtomicBoolean();
 
+    /** Told (uuid, hasVoice) whenever a player's voice state changes. */
+    private final List<BiConsumer<UUID, Boolean>> voiceListeners = new CopyOnWriteArrayList<BiConsumer<UUID, Boolean>>();
+
     private volatile long proxyInstance;
     private volatile boolean proxySeen;
     private volatile String proxyVersion = "";
@@ -58,7 +64,28 @@ public final class ProxyLink {
 
     public void onQuit(UUID uuid) {
         online.remove(uuid);
-        bindings.remove(uuid);
+        Binding old = bindings.remove(uuid);
+        if (old != null && old.voiceEnabled) {
+            fireVoice(uuid, false);
+        }
+    }
+
+    public void addVoiceListener(BiConsumer<UUID, Boolean> listener) {
+        voiceListeners.add(listener);
+    }
+
+    public void removeVoiceListener(BiConsumer<UUID, Boolean> listener) {
+        voiceListeners.remove(listener);
+    }
+
+    private void fireVoice(UUID uuid, boolean hasVoice) {
+        for (BiConsumer<UUID, Boolean> listener : voiceListeners) {
+            try {
+                listener.accept(uuid, hasVoice);
+            } catch (RuntimeException e) {
+                logger.error("A voice listener failed", e);
+            }
+        }
     }
 
     public Binding binding(UUID uuid) {
@@ -140,7 +167,11 @@ public final class ProxyLink {
         @Override
         public void handle(ProxyToBackend.BindPlayers packet) {
             for (ProxyToBackend.BindPlayers.Entry entry : packet.entries) {
-                bindings.put(entry.uuid, new Binding(entry.playerId, entry.voiceEnabled));
+                Binding old = bindings.put(entry.uuid, new Binding(entry.playerId, entry.voiceEnabled));
+                boolean had = old != null && old.voiceEnabled;
+                if (had != entry.voiceEnabled) {
+                    fireVoice(entry.uuid, entry.voiceEnabled);
+                }
             }
         }
 
@@ -148,8 +179,9 @@ public final class ProxyLink {
         public void handle(ProxyToBackend.UnbindPlayers packet) {
             for (int id : packet.playerIds) {
                 for (Map.Entry<UUID, Binding> entry : bindings.entrySet()) {
-                    if (entry.getValue().id == id) {
-                        bindings.remove(entry.getKey(), entry.getValue());
+                    if (entry.getValue().id == id && bindings.remove(entry.getKey(), entry.getValue())
+                            && entry.getValue().voiceEnabled) {
+                        fireVoice(entry.getKey(), false);
                     }
                 }
             }

@@ -3,6 +3,7 @@
 //   node e2e.js <proxy port> <minecraft version>                        basic transport scenario
 //   node e2e.js <proxy port> <minecraft version> zones <config.yml>     zone rules scenario
 //   node e2e.js <proxy port> <minecraft version> switch <a,b,...>       server switch scenario
+//   node e2e.js <proxy port> <minecraft version> priority               priority / broadcast scenario
 //
 'use strict'
 const mineflayer = require('mineflayer')
@@ -64,7 +65,7 @@ const C2P = {
   hello: () => new Writer().varint(0).varint(PROTOCOL).string('0.1.0-e2e').string(VERSION).string('node-e2e').varint(3).build(),
   auth: (id, pub, mac) => new Writer().varint(1).varint(id).bytes(pub).bytes(mac).build(),
   selectTransport: (t) => new Writer().varint(2).byte(t).build(),
-  mic: (seq, opus) => new Writer().varint(3).varint(seq).byte(0).bytes(opus).build(),
+  mic: (seq, opus, flags = 0) => new Writer().varint(3).varint(seq).byte(flags).bytes(opus).build(),
   micEnd: (seq) => new Writer().varint(4).varint(seq).build(),
   ping: (id) => new Writer().varint(6).long(id).build()
 }
@@ -448,6 +449,58 @@ ${results.length - failed}/${results.length} checks passed`)
   setTimeout(() => process.exit(failed ? 1 : 0), 300)
 }
 
+// ---------------------------------------------------------------- priority / broadcast scenario
+// BotA is op on the sub-server (needs bvc.priority.200 and bvc.broadcast for ops, see README), BotB is not. BotB stands far
+// outside the proximity radius: only a broadcast reaches it, and BotA's frames carry its priority.
+async function priority () {
+  const rcon = new Rcon(RCON_PORT, RCON_PASSWORD)
+  await rcon.connect()
+  const run = async (command) => { const out = await rcon.command(command); console.log('  > ' + command + (out ? '  => ' + out.replace(/§./g, '').trim().slice(0, 120) : '')) }
+  const a = new Bot('BotA')
+  const b = new Bot('BotB')
+  try {
+    await run('op BotA')
+    await run('deop BotB')
+    const [wa] = await Promise.all([a.hello(), b.hello()])
+    a.sendB(C2P.selectTransport(1))
+    b.sendB(C2P.selectTransport(1))
+    await run('tp BotA 0 -60 0')
+    await run('tp BotB 500 -60 500')
+    // Sub-server permissions are re-read every 5 seconds.
+    const state = await a.waitFor((p) => p.type === 'VoiceState' && p.priority > 0 && (p.flags & 2) !== 0, 15000, 'priority state')
+    check('Op gets priority and broadcast from the sub-server', state.priority === 200, 'priority=' + state.priority + ' flags=' + state.flags)
+    check('Clients get the ducking level', state.ducking > 0, 'ducking=' + state.ducking + ' dB')
+
+    let heard = await speakAndListen(a, b, wa.sessionId)
+    check('Far away, normal speech -> not heard', heard.length === 0)
+
+    const before = audioFrom(b, wa.sessionId).length
+    for (let i = 0; i < 3; i++) { a.sendB(C2P.mic(Date.now() & 0xffff, Buffer.from([0xf8, i]), 1)); await sleep(20) }
+    await sleep(1000)
+    heard = audioFrom(b, wa.sessionId).slice(before)
+    check('Broadcast reaches the whole room', heard.length === 3 && heard[0].category === 2, heard.length ? 'category=' + heard[0].category : 'none')
+    check('Frames carry the speaker priority', heard.length > 0 && heard[0].priority === 200, heard.length ? 'priority=' + heard[0].priority : '')
+
+    const bState = b.packets.filter((p) => p.type === 'VoiceState').pop()
+    check('Non-op cannot broadcast', (bState.flags & 2) === 0 && bState.priority === 0, 'flags=' + bState.flags)
+    const wb = b.packets.find((p) => p.type === 'Welcome')
+    const before2 = audioFrom(a, wb.sessionId).length
+    for (let i = 0; i < 3; i++) { b.sendB(C2P.mic(Date.now() & 0xffff, Buffer.from([0xf8, i]), 1)); await sleep(20) }
+    await sleep(1000)
+    check('A broadcast without permission is not delivered', audioFrom(a, wb.sessionId).length === before2)
+  } catch (e) {
+    check('priority scenario', false, e.message)
+  } finally {
+    try { await run('deop BotA') } catch (e) { /* best effort */ }
+    rcon.close()
+    a.quit()
+    b.quit()
+  }
+  const failed = results.filter((r) => !r.ok).length
+  console.log(`\n${results.length - failed}/${results.length} checks passed`)
+  setTimeout(() => process.exit(failed ? 1 : 0), 300)
+}
+
 // ---------------------------------------------------------------- server switch scenario
 // One bot hops between sub-servers with /server; the zone it receives must come from whichever
 // sub-server it is on (e.g. a Bukkit one and the server mods side by side).
@@ -481,6 +534,8 @@ if (LIBRARY) {
   // nothing to run
 } else if (process.argv[4] === 'zones') {
   zones(process.argv[5])
+} else if (process.argv[4] === 'priority') {
+  priority()
 } else if (process.argv[4] === 'switch') {
   serverSwitch((process.argv[5] || 'lobby').split(','))
 } else {

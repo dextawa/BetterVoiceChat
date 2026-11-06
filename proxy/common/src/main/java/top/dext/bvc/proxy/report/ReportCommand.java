@@ -52,7 +52,7 @@ public final class ReportCommand {
             }
             core.reports().report(source.uuid(), source.name(), target.get().uuid(), target.get().name(), server, reason,
                     core.clock().millis(), source.hasPermission(BYPASS_COOLDOWN)).thenAccept(result -> {
-                        switch (result) {
+                        switch (result.result()) {
                             case CREATED -> source.sendMessage(messages.get("report-done", "player", target.get().name()));
                             case COOLDOWN -> source.sendMessage(messages.get("report-cooldown"));
                             case SELF -> source.sendMessage(messages.get("report-self"));

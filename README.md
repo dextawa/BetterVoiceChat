@@ -23,6 +23,7 @@
 | 客户端核心（连接、Opus、混音、3D 方位、按键说话 / 声控） | ✅ 完成，有测试（和 BC 核心在同一进程里联调） |
 | 客户端 Mod 1.16.5、1.18.2、1.19.2、1.19.4、1.20.1 Fabric / Forge；1.20.4–1.21.11、26.1–26.3 Fabric / NeoForge（32 个 jar） | ✅ 31 个在真实客户端里进服并连上语音（Velocity + Paper 1.21.4 + ViaVersion/ViaBackwards）；1.16.5 Forge 的开发环境启动即崩（原版代码里的映射问题），静态检查通过，未真机验证 |
 | 客户端 Mod 1.8.9、1.12.2 Forge | ✅ 在真实客户端里进服并连上语音（同一测试环境，另装 ViaRewind） |
+| 优先级 / 广播 / 闪避、房间 API、对外接口（M6） | ✅ 完成，有测试；优先级和广播在 Velocity + Paper 1.21.4 上端到端验证 |
 | 录音、举报、Web 面板 | ✅ 完成，有测试；在 Velocity + Paper 1.21.4 上端到端验证（机器人说真实 Opus → `/vreport` → 面板里查看证据、回放、处理、禁麦、审计），回放用 ffmpeg 和 Chrome 解码验证 |
 
 ## 构建
@@ -50,6 +51,21 @@
   - 在游戏里执行 `/bvc web` 获取 5 分钟内有效的一次性登录链接；账号权限跟随 `bvc.web.review`（查看举报和录音）、`bvc.web.mute`（禁麦）、`bvc.web.admin`（账号管理、审计日志）。
   - 登录后可以在“我的账号”里设置密码，以后不进游戏也能登录；第一次部署时也可以在 BC 控制台执行 `/bvc web <用户名> <密码>` 创建管理员账号。
   - 功能：举报队列与处理、多轨回放（按说话人分轨，可静音 / 独听，可只播举报人听到的部分）、按玩家 / 子服 / 时间搜索录音、禁麦与解禁、审计日志（谁看了哪个举报、听了哪段录音、做了什么操作）。
+
+### 给其他插件用的 API
+
+依赖 `api` 模块（`top.dext.bvc:api`，只有接口，Java 8）。只提供接口，不内置任何联动（LiteBans、Discord 等由服主或第三方自己对接）。
+
+- **BC 端** `BvcProxy.get()`：
+  - `mutes()`：禁麦 / 解禁 / 查询、全服和子服开关，`MuteListener` 监听禁麦变化（例如在 LiteBans 禁言事件里调用 `mute`）。
+  - `player(uuid)` / `players()`：在线玩家的语音状态（是否连上、所在子服、是否在说话、优先级、客户端闭麦 / 关闭收听、传输方式）。
+  - `reportService()`：提交举报、查询举报、修改处理状态（证据和回放留在 Web 面板）。
+  - `addListener(VoiceListener)`：语音连上 / 断开、举报证据生成完成。
+- **子服** `BvcServer.get()`（Bukkit 插件和服务端 Mod 相同）：
+  - 默认区域、房间（创建 / 删除 / 列出 / 成员）、玩家所在房间、分组、优先级、能否说话 / 收听 / 广播，以及读回这些设置。
+  - `hasVoice(uuid)`、`addListener(VoiceStateListener)`：玩家语音连上或断开时通知。
+  - `mute` / `unmute`：通过 BC 的禁麦系统禁麦。
+- 优先级取 BC 权限 `bvc.priority.<n>`、子服权限 `bvc.priority.<n>` 和子服 API 三者的最大值（0–255）；高优先级的人说话时，客户端把其他人压低 `audio.ducking-db` 分贝；每个听众同时最多收 `audio.max-streams-per-listener` 路，优先级高的优先。有 `bvc.broadcast`（BC 或子服任一处）或 API 允许广播的人按广播键时，整个房间都能听到，不跨子服。
 
 端到端测试见 [tools/e2e](tools/e2e/README.md)。
 

@@ -17,4 +17,10 @@ public interface BvcProxyApi {
     Optional<VoicePlayer> player(UUID uuid);
 
     Collection<VoicePlayer> players();
+
+    ReportService reportService();
+
+    void addListener(VoiceListener listener);
+
+    void removeListener(VoiceListener listener);
 }

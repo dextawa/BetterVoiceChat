@@ -21,4 +21,16 @@ public interface VoicePlayer {
     boolean isSpeaking();
 
     String modVersion();
+
+    /** Priority from the proxy permission {@code bvc.priority.<n>} (sub-servers may raise it). */
+    int priority();
+
+    /** The player muted their own microphone in the client. */
+    boolean isMicrophoneMuted();
+
+    /** The player turned off listening in the client. */
+    boolean isDeafened();
+
+    /** {@code STREAM} (A), {@code PLUGIN_MESSAGE} (B) or {@code null} while not connected. */
+    String transportName();
 }

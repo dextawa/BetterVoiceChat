@@ -44,6 +44,10 @@ public final class ReportManager {
         DISABLED
     }
 
+    /** {@code id} is 0 unless {@code result} is {@link Result#CREATED}. */
+    public record Filed(Result result, long id) {
+    }
+
     /** Called with a report once its evidence is ready (to notify staff). */
     private final Consumer<ReportStore.Report> onReady;
     private final ReportStore store;
@@ -104,18 +108,18 @@ public final class ReportManager {
      * Files a report. {@code now} is the report time; the evidence window is
      * {@code [now - before, now + after]}.
      */
-    public CompletableFuture<Result> report(UUID reporter, String reporterName, UUID target, String targetName, String server,
+    public CompletableFuture<Filed> report(UUID reporter, String reporterName, UUID target, String targetName, String server,
                                             String reason, long now, boolean bypassCooldown) {
         BvcConfig.Reports cfg = config.get().reports();
         if (!cfg.enabled()) {
-            return CompletableFuture.completedFuture(Result.DISABLED);
+            return CompletableFuture.completedFuture(new Filed(Result.DISABLED, 0));
         }
         if (reporter.equals(target)) {
-            return CompletableFuture.completedFuture(Result.SELF);
+            return CompletableFuture.completedFuture(new Filed(Result.SELF, 0));
         }
         Long last = lastReport.get(reporter);
         if (!bypassCooldown && last != null && now - last < cfg.cooldownSeconds() * 1000L) {
-            return CompletableFuture.completedFuture(Result.COOLDOWN);
+            return CompletableFuture.completedFuture(new Filed(Result.COOLDOWN, 0));
         }
         lastReport.put(reporter, now);
         ReportStore.Report draft = new ReportStore.Report(0, reporter, reporterName, target, targetName, server,
@@ -123,7 +127,7 @@ public final class ReportManager {
                 ReportStore.Status.COLLECTING, null, 0, null);
         return store.insert(draft).thenApply(report -> {
             schedule(report, cfg.afterSeconds() * 1000L + Recorder.settleMillis());
-            return Result.CREATED;
+            return new Filed(Result.CREATED, report.id());
         });
     }
 

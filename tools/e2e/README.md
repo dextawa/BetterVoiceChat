@@ -13,6 +13,7 @@
 | `node e2e.js 25599 1.21.4` | 基础：握手、A/B 两种传输、子服下发区域、双向听到、顺序、结束包、心跳、不回声 |
 | `node e2e.js 25599 1.21.4 zones <子服 config.yml 路径>` | 规则：范围内外（48 格边界）、配置重载切换组队麦、计分板队伍、队伍不限距离、退队、自由麦、旁观者两种策略、按世界设置区域 |
 | `node e2e.js 25599 1.21.4 switch lobby,fabric,neoforge` | 换服：一个机器人用 `/server` 依次进入这些子服，每个子服都要下发自己的区域 |
+| `node e2e.js 25599 1.21.4 priority` | 优先级 / 广播：OP 从子服权限拿到优先级 200 和广播权，远处普通说话听不到、广播能听到并带优先级；非 OP 的广播不转发 |
 | `node report.js 25599 1.21.4` | 举报：被举报人说一段真实的 Opus（`tones/`），举报人 `/vreport`，然后通过 Web 面板接口检查证据包、回放音频、录音搜索、处理举报和审计日志 |
 
 `zones` 会临时修改子服的 `config.yml`，结束时恢复。它通过 RCON 执行 `tp`、`team`、`gamemode`、`bvcs reload` 等命令。
@@ -46,6 +47,17 @@
    ```
 
 必须用环境变量 `BVC_RCON_PASSWORD` 传入上面设置的 RCON 密码；`BVC_HOST`、`BVC_RCON_PORT` 可覆盖默认值。
+
+## 优先级场景
+
+`priority` 依赖子服给 OP 的两个权限：`bvc.priority.200`（Bukkit 默认所有权限节点对 OP 生效）和 `bvc.broadcast`（默认谁都没有）。在 Paper 的 `permissions.yml` 里加：
+
+```yaml
+e2e.broadcaster:
+  default: op
+  children:
+    bvc.broadcast: true
+```
 
 ## 举报场景
 

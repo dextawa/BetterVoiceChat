@@ -157,9 +157,9 @@ BC 端每帧的工作是几次哈希查找加 N 次缓冲区写入，不做空�
 
 ## 7. 优先级、广播、闪避
 
-- 优先级 0–255：取 BC 权限 `bvc.priority.<n>` 和子服 API 给出的值中较大者。
+- 优先级 0–255：取 BC 权限 `bvc.priority.<n>`、子服权限 `bvc.priority.<n>`（等级由子服 `priority-levels` 决定）和子服 API 给出的值中最大者。每个音频包都带着说话人的优先级；每个听众同时最多收 `audio.max-streams-per-listener` 路，满了时高优先级的人能挤掉低优先级的。
 - 高优先级的人说话时，客户端把低优先级的声音压低（分贝数由服务器下发）。
-- 有 `bvc.broadcast` 权限的人按住广播键时，所在房间（默认整个子服）的人都能听到。不跨子服。
+- 有 `bvc.broadcast` 权限（BC 或子服任一处）或子服 API 允许广播的人按住广播键时，所在房间（默认整个子服）的人都能听到。不跨子服。没有权限时广播包直接丢弃。
 
 ## 8. 禁麦
 
@@ -326,3 +326,10 @@ BC 和子服各有一个每次启动随机生成的实例 ID，放在 `ProxyHell
 - **回放**：服务器把一段话的帧封装成 Ogg Opus（RFC 7845，只封装不转码，`OggOpus`），浏览器用 `decodeAudioData` 解码。帧按客户端抖动缓冲的方式连续排放，只有晚到超过 60 毫秒（真的停顿或丢帧）才补静音帧，网络抖动不会把录音拉长。单元测试用 ffmpeg 解码验证时长和停顿位置；真机测试中 2 秒的发言回放为 2.03 秒，Chrome 解码正常。
 - **Web 面板**（`proxy/common/.../web`）：JDK 自带的 `HttpServer`，4 个线程；静态文件（原生 HTML / JS / CSS，没有构建步骤）打包在插件 jar 的 `bvc-web/` 里。接口用 JSON（Gson 由 Velocity / BungeeCord 提供）。登录方式：游戏里 `/bvc web` 生成 5 分钟有效、只能用一次的令牌，访问 `/login?token=…` 后立即换成会话 Cookie 并跳转（令牌不留在地址栏）；或者账号密码登录（PBKDF2-SHA256，12 万次迭代；同一账号 5 分钟内错 5 次就暂时拒绝）。Cookie 为 `HttpOnly`、`SameSite=Strict`，`public-url` 是 https 时加 `Secure`；非 GET 请求检查 `Origin`，拒绝跨站请求。会话只保存在内存里，BC 重启后需要重新登录。账号表 `bvc_web_users`：游戏里第一次 `/bvc web` 时创建，权限每次生成链接时按游戏里的 `bvc.web.*` 同步；控制台 `/bvc web <用户名> <密码>` 可以创建拥有全部权限的账号。所有查看举报、播放录音、搜索、禁麦、处理举报、改权限的操作都写入 `bvc_audit`。
 - **测试**：单元测试覆盖分段文件读写和截断、Ogg 页结构、录音 → 证据包（只包含举报人真正听到的人，不包含远处的人和别的子服）、容量上限、面板登录（一次性令牌只能用一次、密码、跨站拒绝、权限）、面板禁麦和审计。端到端（`tools/e2e/report.js`，2026-11-06）：两个机器人经 Velocity 进 Paper，被举报人说 2 秒真实 Opus，举报人 `/vreport`，面板接口里能看到证据、回放、搜索、处理、审计，9 项全部通过；另外在浏览器里手动走了一遍面板（登录、时间轴回放、录音搜索、禁麦 / 解禁、审计日志）。
+
+### 16.11 M6：优先级、广播、闪避和对外接口
+
+- **优先级、广播、闪避**在 M2–M4 时已经实现（BC 查表转发时按房间广播、按优先级挤占接收路数，子服合并权限和 API 覆盖项，客户端按下发的分贝数压低低优先级的声音），M6 补了端到端验证（`tools/e2e` 的 `priority` 场景，2026-11-06 在 Velocity + Paper 1.21.4 上 7 项通过）：OP 从子服权限拿到优先级 200 和广播权；在半径外普通说话听不到、广播能听到且分类为广播、带优先级 200；客户端收到 12 dB 的闪避值；非 OP 发广播包不会被转发。
+- **子服 API 补充**：`membersOf(room)`（房间里在线的玩家）、`groupOf` / `priorityOf`（读回 API 设置的分组和优先级）、`addListener(VoiceStateListener)`（BC 告诉子服某玩家语音连上 / 断开时通知，来自 `BindPlayers` 里 `voiceEnabled` 的变化、`UnbindPlayers` 和退服）。删除房间后成员回到默认区域，API 设置的分组保留。
+- **BC API 补充**：`VoicePlayer` 增加 `priority()`、`isMicrophoneMuted()`、`isDeafened()`、`transportName()`；`reportService()`（提交、查询、修改举报状态，提交不受冷却限制）；`addListener(VoiceListener)`：`onVoiceConnected`、`onVoiceDisconnected`（退出、A 通道断开）、`onReport`（证据生成完成时，和通知管理员同时）。监听器抛出的异常只记日志，不影响 BVC。
+- 按需求，API 只提供接口；LiteBans、Discord 等联动不在 BVC 里实现。
