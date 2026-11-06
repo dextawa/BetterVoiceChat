@@ -13,6 +13,7 @@
 | `node e2e.js 25599 1.21.4` | 基础：握手、A/B 两种传输、子服下发区域、双向听到、顺序、结束包、心跳、不回声 |
 | `node e2e.js 25599 1.21.4 zones <子服 config.yml 路径>` | 规则：范围内外（48 格边界）、配置重载切换组队麦、计分板队伍、队伍不限距离、退队、自由麦、旁观者两种策略、按世界设置区域 |
 | `node e2e.js 25599 1.21.4 switch lobby,fabric,neoforge` | 换服：一个机器人用 `/server` 依次进入这些子服，每个子服都要下发自己的区域 |
+| `node report.js 25599 1.21.4` | 举报：被举报人说一段真实的 Opus（`tones/`），举报人 `/vreport`，然后通过 Web 面板接口检查证据包、回放音频、录音搜索、处理举报和审计日志 |
 
 `zones` 会临时修改子服的 `config.yml`，结束时恢复。它通过 RCON 执行 `tp`、`team`、`gamemode`、`bvcs reload` 等命令。
 
@@ -45,6 +46,10 @@
    ```
 
 必须用环境变量 `BVC_RCON_PASSWORD` 传入上面设置的 RCON 密码；`BVC_HOST`、`BVC_RCON_PORT` 可覆盖默认值。
+
+## 举报场景
+
+`report.js` 需要 BC 的 Web 面板（默认 `http://127.0.0.1:8790`，可用 `BVC_WEB_URL` 覆盖）和一个面板账号。先在 BC 控制台执行 `bvc web e2eadmin <密码>` 创建账号，再用 `BVC_WEB_PASSWORD` 传入密码（`BVC_WEB_USER` 可改用户名）。为了不等太久，可以在 BC 的 `config.yml` 里把 `reports.before-seconds` / `after-seconds` 调小（例如 30 / 5），`cooldown-seconds` 设成 0。
 
 ## 测服务端 Mod
 

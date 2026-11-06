@@ -473,7 +473,13 @@ async function serverSwitch (route) {
   setTimeout(() => process.exit(failed ? 1 : 0), 300)
 }
 
-if (process.argv[4] === 'zones') {
+// Other scenarios (report.js) load this file as a library.
+module.exports = { Bot, Rcon, C2P, decode, sleep }
+const LIBRARY = process.argv[4] === 'library'
+
+if (LIBRARY) {
+  // nothing to run
+} else if (process.argv[4] === 'zones') {
   zones(process.argv[5])
 } else if (process.argv[4] === 'switch') {
   serverSwitch((process.argv[5] || 'lobby').split(','))
@@ -482,7 +488,7 @@ if (process.argv[4] === 'zones') {
 }
 
 // Watchdog: never hang silently.
-setTimeout(() => {
+if (!LIBRARY) setTimeout(() => {
   console.log('WATCHDOG: still running after 100s')
   for (const bot of Bot.all || []) {
     console.log(bot.name, 'state', bot.client.state, 'packets', bot.packets.map((p) => p.type).join(','))

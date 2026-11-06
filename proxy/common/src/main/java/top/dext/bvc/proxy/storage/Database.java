@@ -139,6 +139,61 @@ public final class Database implements AutoCloseable {
                         k VARCHAR(64) PRIMARY KEY,
                         v VARCHAR(4096) NOT NULL
                     )"""
+            ),
+            // 2: recordings, reports, web panel.
+            List.of(
+                    """
+                    CREATE TABLE IF NOT EXISTS bvc_utterances (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        segment VARCHAR(255) NOT NULL,
+                        server VARCHAR(64) NOT NULL,
+                        speaker_uuid VARCHAR(36) NOT NULL,
+                        speaker_name VARCHAR(32) NOT NULL,
+                        started_at BIGINT NOT NULL,
+                        ended_at BIGINT NOT NULL,
+                        frames INT NOT NULL,
+                        local_id INT NOT NULL,
+                        offset_from BIGINT NOT NULL,
+                        offset_to BIGINT NOT NULL
+                    )""",
+                    "CREATE INDEX IF NOT EXISTS bvc_utterances_time ON bvc_utterances(started_at)",
+                    "CREATE INDEX IF NOT EXISTS bvc_utterances_speaker ON bvc_utterances(speaker_uuid, started_at)",
+                    "CREATE INDEX IF NOT EXISTS bvc_utterances_segment ON bvc_utterances(segment)",
+                    """
+                    CREATE TABLE IF NOT EXISTS bvc_reports (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        reporter_uuid VARCHAR(36) NOT NULL,
+                        reporter_name VARCHAR(32) NOT NULL,
+                        target_uuid VARCHAR(36) NOT NULL,
+                        target_name VARCHAR(32) NOT NULL,
+                        server VARCHAR(64) NOT NULL,
+                        reason VARCHAR(512) NOT NULL,
+                        created_at BIGINT NOT NULL,
+                        window_from BIGINT NOT NULL,
+                        window_to BIGINT NOT NULL,
+                        status VARCHAR(16) NOT NULL,
+                        handled_by VARCHAR(64),
+                        handled_at BIGINT,
+                        note VARCHAR(1024)
+                    )""",
+                    "CREATE INDEX IF NOT EXISTS bvc_reports_status ON bvc_reports(status, created_at)",
+                    """
+                    CREATE TABLE IF NOT EXISTS bvc_web_users (
+                        username VARCHAR(32) PRIMARY KEY,
+                        uuid VARCHAR(36),
+                        password_hash VARCHAR(256),
+                        permissions VARCHAR(256) NOT NULL,
+                        created_at BIGINT NOT NULL
+                    )""",
+                    """
+                    CREATE TABLE IF NOT EXISTS bvc_audit (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        at BIGINT NOT NULL,
+                        username VARCHAR(32) NOT NULL,
+                        action VARCHAR(64) NOT NULL,
+                        detail VARCHAR(1024) NOT NULL
+                    )""",
+                    "CREATE INDEX IF NOT EXISTS bvc_audit_at ON bvc_audit(at)"
             ));
 
     private static Void migrate(Connection connection) throws SQLException {

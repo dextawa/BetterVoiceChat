@@ -34,6 +34,12 @@ import top.dext.bvc.proxy.mute.MuteManager;
 import top.dext.bvc.proxy.platform.BvcLogger;
 import top.dext.bvc.proxy.platform.PlatformPlayer;
 import top.dext.bvc.proxy.platform.ProxyPlatform;
+import top.dext.bvc.proxy.recording.HeardLog;
+import top.dext.bvc.proxy.recording.Recorder;
+import top.dext.bvc.proxy.recording.RecordingIndex;
+import top.dext.bvc.proxy.report.ReportCommand;
+import top.dext.bvc.proxy.report.ReportManager;
+import top.dext.bvc.proxy.report.ReportStore;
 import top.dext.bvc.proxy.routing.RouteRegistry;
 import top.dext.bvc.proxy.routing.ServerRoutes;
 import top.dext.bvc.proxy.routing.VoiceRouter;
@@ -44,6 +50,8 @@ import top.dext.bvc.proxy.storage.Database;
 import top.dext.bvc.proxy.storage.Stores;
 import top.dext.bvc.proxy.transport.StreamDetector;
 import top.dext.bvc.proxy.transport.StreamGateway;
+import top.dext.bvc.proxy.web.WebAuth;
+import top.dext.bvc.proxy.web.WebServer;
 
 /**
  * Platform-independent heart of the proxy plugin. The Velocity and BungeeCord modules forward
@@ -69,6 +77,11 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
     private VoiceRouter router;
     private BackendBridge backend;
     private BvcCommand command;
+    private Recorder recorder;
+    private ReportManager reports;
+    private ReportCommand reportCommand;
+    private WebAuth webAuth;
+    private WebServer web;
 
     public BvcProxyCore(ProxyPlatform platform) {
         this(platform, Clock.systemUTC());
@@ -93,10 +106,34 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         mutes.addListener(new MuteNotifier());
         router = new VoiceRouter(sessions, routes, mutes, () -> config, clock);
         backend = new BackendBridge(sessions, routes, router, mutes, logger, platform.pluginVersion());
+
+        recorder = new Recorder(data.resolve("recordings"), new RecordingIndex(database), new HeardLog(heardRetention()),
+                () -> config, logger);
+        recorder.start();
+        router.setSink(recorder);
+        reports = new ReportManager(new ReportStore(database), recorder, data.resolve("reports"), () -> config, logger,
+                this::onReportReady);
+        reports.resumePending();
+        reportCommand = new ReportCommand(this);
+        webAuth = new WebAuth(database);
+        if (config.web().enabled()) {
+            web = new WebServer(webAuth, reports, recorder, mutes, stores, () -> config, logger);
+            try {
+                web.start();
+            } catch (java.io.IOException e) {
+                logger.error("Could not start the web panel on " + config.web().bind() + ":" + config.web().port(), e);
+                web = null;
+            }
+        }
         command = new BvcCommand(this);
 
         tasks.add(platform.scheduleRepeating(mutes::purgeExpired, 5, 5, TimeUnit.SECONDS));
         tasks.add(platform.scheduleRepeating(this::refreshAllPermissions, 30, 30, TimeUnit.SECONDS));
+        tasks.add(platform.scheduleRepeating(() -> {
+            long now = clock.millis();
+            webAuth.purge(now);
+            reports.purgeExpired(now);
+        }, 1, 60, TimeUnit.MINUTES));
 
         if (!BvcCrypto.isKeyExchangeSupported()) {
             logger.warn("This Java runtime lacks EC key exchange; stream transport disabled, clients will use plugin messages");
@@ -122,6 +159,19 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         for (VoiceSession session : new ArrayList<>(sessions.all())) {
             sessions.remove(session.uuid());
         }
+        if (web != null) {
+            web.stop();
+            web = null;
+        }
+        if (router != null) {
+            router.setSink(null);
+        }
+        if (recorder != null) {
+            recorder.close();
+        }
+        if (reports != null) {
+            reports.close();
+        }
         if (database != null) {
             database.close();
         }
@@ -131,6 +181,7 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         Path data = platform.dataDirectory();
         config = BvcConfig.load(data.resolve("config.yml"));
         messages = Messages.load(data.resolve("messages.yml"));
+        recorder.heard().setRetention(heardRetention());
         refreshAllPermissions();
         for (VoiceSession session : sessions.all()) {
             router.pushVoiceState(session);
@@ -434,6 +485,27 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
         return uuid.getMostSignificantBits() == 0;
     }
 
+    // ------------------------------------------------------------------ reports
+
+    /** The "who heard whom" log must cover the whole report window. */
+    private long heardRetention() {
+        BvcConfig.Reports cfg = config.reports();
+        return (cfg.beforeSeconds() + cfg.afterSeconds()) * 1000L + 60_000L;
+    }
+
+    /** Evidence is ready: tell staff online. */
+    private void onReportReady(ReportStore.Report report) {
+        String text = messages.get("report-staff", "id", report.id(), "reporter", report.reporterName(),
+                "target", report.targetName(), "server", report.server(),
+                "reason", report.reason().isEmpty() ? "-" : report.reason());
+        for (PlatformPlayer player : platform.players()) {
+            if (player.hasPermission(ReportCommand.NOTIFY_PERMISSION)) {
+                player.sendMessage(text);
+            }
+        }
+        platform.console().sendMessage(text);
+    }
+
     // ------------------------------------------------------------------ API + accessors
 
     @Override
@@ -477,5 +549,30 @@ public final class BvcProxyCore implements BvcProxyApi, StreamGateway {
 
     public BvcCommand command() {
         return command;
+    }
+
+    public ReportCommand reportCommand() {
+        return reportCommand;
+    }
+
+    public ReportManager reports() {
+        return reports;
+    }
+
+    public Recorder recorder() {
+        return recorder;
+    }
+
+    public WebAuth webAuth() {
+        return webAuth;
+    }
+
+    /** {@code null} when the panel is disabled or failed to start. */
+    public WebServer web() {
+        return web;
+    }
+
+    public Clock clock() {
+        return clock;
     }
 }

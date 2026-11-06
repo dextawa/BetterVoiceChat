@@ -3,9 +3,11 @@ package top.dext.bvc.proxy.command;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -17,6 +19,8 @@ import top.dext.bvc.proxy.platform.CommandSource;
 import top.dext.bvc.proxy.platform.PlatformPlayer;
 import top.dext.bvc.proxy.session.VoiceSession;
 import top.dext.bvc.proxy.storage.Stores;
+import top.dext.bvc.proxy.web.WebAuth;
+import top.dext.bvc.proxy.web.WebServer;
 
 /**
  * {@code /bvc} admin command, shared by both proxy platforms.
@@ -24,7 +28,7 @@ import top.dext.bvc.proxy.storage.Stores;
 public final class BvcCommand {
 
     public static final String PERMISSION = "bvc.command";
-    private static final List<String> SUBCOMMANDS = List.of("mute", "unmute", "globalmute", "servermute", "status", "reload", "help");
+    private static final List<String> SUBCOMMANDS = List.of("mute", "unmute", "globalmute", "servermute", "status", "web", "reload", "help");
 
     private final BvcProxyCore core;
 
@@ -34,11 +38,16 @@ public final class BvcCommand {
 
     public void execute(CommandSource source, String[] args) {
         Messages messages = core.messages();
+        String sub = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
+        // Panel staff need only bvc.web.*; web() checks those itself.
+        if (sub.equals("web")) {
+            web(source, Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         if (!source.hasPermission(PERMISSION)) {
             source.sendMessage(messages.get("no-permission"));
             return;
         }
-        String sub = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         if (!sub.equals("help") && SUBCOMMANDS.contains(sub) && !source.hasPermission(PERMISSION + "." + sub)) {
             source.sendMessage(messages.get("no-permission"));
             return;
@@ -217,6 +226,47 @@ public final class BvcCommand {
             line(source, "禁麦", describe(mute.scope()) + " / " + (mute.isPermanent() ? messages.raw("duration-permanent")
                     : Durations.format(mute.expiresAt() - System.currentTimeMillis())) + " / " + mute.reason());
         }
+    }
+
+    /** Sends a one-time login link for the web panel; the account carries the player's {@code bvc.web.*} permissions. */
+    private void web(CommandSource source, String[] args) {
+        Messages messages = core.messages();
+        WebServer web = core.web();
+        if (web == null) {
+            source.sendMessage(messages.get("web-disabled"));
+            return;
+        }
+        if (source.uuid() == null) {
+            // Console: /bvc web <username> <password> creates (or resets) an admin account.
+            if (args.length != 2 || args[1].length() < 8) {
+                source.sendMessage(messages.get("web-console-usage"));
+                return;
+            }
+            String username = args[0];
+            core.webAuth().issueLoginToken(username, null, EnumSet.allOf(WebAuth.Permission.class), core.clock().millis())
+                    .thenCompose(token -> core.webAuth().setPassword(username, args[1]))
+                    .thenRun(() -> {
+                        core.webAuth().audit("console", "create-admin", username, core.clock().millis());
+                        source.sendMessage(messages.get("web-console-done", "user", username, "url", web.publicUrl()));
+                    });
+            return;
+        }
+        Set<WebAuth.Permission> permissions = EnumSet.noneOf(WebAuth.Permission.class);
+        for (WebAuth.Permission permission : WebAuth.Permission.values()) {
+            if (source.hasPermission(permission.node)) {
+                permissions.add(permission);
+            }
+        }
+        if (permissions.isEmpty()) {
+            source.sendMessage(messages.get("no-permission"));
+            return;
+        }
+        core.webAuth().issueLoginToken(source.name(), source.uuid(), permissions, core.clock().millis()).thenAccept(token ->
+                source.sendMessage(messages.get("web-link", "url", web.publicUrl() + "/login?token=" + token)))
+                .exceptionally(error -> {
+                    core.logger().error("Could not create a web login link", error);
+                    return null;
+                });
     }
 
     private void reload(CommandSource source) {

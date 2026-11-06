@@ -34,6 +34,7 @@ public final class BvcBungeePlugin extends Plugin implements Listener {
         getProxy().registerChannel(BvcProtocol.CHANNEL_PROXY);
         getProxy().getPluginManager().registerListener(this, this);
         getProxy().getPluginManager().registerCommand(this, new BungeeCommand(core, platform));
+        getProxy().getPluginManager().registerCommand(this, new BungeeReportCommand(core, platform));
         try {
             BungeeInjector.inject(getProxy(), core);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {

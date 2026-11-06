@@ -48,3 +48,38 @@ servers-without-plugin: DISABLED
 storage:
   # 目前支持 H2（内置，单文件，无需配置）
   type: H2
+
+# 录音：原样保存经过 BC 转发的语音（Opus，不转码），用于举报回放。
+# 请在服务器规则或进服提示里告知玩家语音会被录音。
+recording:
+  enabled: true
+  # 滚动录音的总容量上限（MB），满了从最旧的开始删除。16kbps 下 1024MB 约 125 小时说话量
+  max-size-mb: 1024
+  # 每个录音文件覆盖多少分钟
+  segment-minutes: 60
+
+# 玩家举报：/vreport <玩家> [原因]
+reports:
+  enabled: true
+  # 证据包包含举报前多少秒、举报后多少秒的语音（举报后的部分录完才封包）
+  before-seconds: 300
+  after-seconds: 120
+  # 同一个玩家两次举报之间至少隔多少秒
+  cooldown-seconds: 120
+  # 证据包保留天数（不占滚动录音的容量，也不会被滚动删除）
+  keep-days: 90
+  # 举报命令名（第一个是主命令，其余是别名）
+  command-aliases: [vreport, voicereport]
+
+# Web 面板：举报处理、回放、搜索录音、禁麦、审计日志
+web:
+  enabled: true
+  # 只监听本机，建议用 Nginx 等反向代理对外提供 HTTPS
+  bind: "127.0.0.1"
+  # 0 = 随便找一个空闲端口（测试用）
+  port: 8790
+  # 管理员在浏览器里访问面板用的地址（用于生成 /bvc web 的登录链接），例如 https://voice.example.com
+  # 留空 = http://<bind>:<port>
+  public-url: ""
+  # 登录后多少小时需要重新登录
+  session-hours: 12

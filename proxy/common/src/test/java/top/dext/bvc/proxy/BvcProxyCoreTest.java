@@ -35,9 +35,8 @@ class BvcProxyCoreTest {
     private FakePlatform platform;
 
     private void start(String configYaml) throws Exception {
-        if (configYaml != null) {
-            Files.writeString(data.resolve("config.yml"), configYaml);
-        }
+        // A free port for the web panel, so parallel test runs never collide on 8790.
+        Files.writeString(data.resolve("config.yml"), (configYaml == null ? "" : configYaml) + "\nweb:\n  port: 0\n");
         platform = new FakePlatform(data);
         core = new BvcProxyCore(platform, new MutableClock(System.currentTimeMillis()));
         core.enable();

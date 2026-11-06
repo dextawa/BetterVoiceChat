@@ -12,4 +12,6 @@ dependencies {
     testImplementation(project(":proxy:common"))
     testImplementation(libs.netty.handler)
     testImplementation(libs.netty.codec)
+    // Provided by Velocity / BungeeCord at runtime; the proxy's web panel uses it.
+    testImplementation(libs.gson)
 }

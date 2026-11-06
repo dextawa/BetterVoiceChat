@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BetterVoiceChat 面板</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <strong>BetterVoiceChat</strong>
+  <nav id="nav" hidden>
+    <a href="#reports" data-perm="canReview">举报</a>
+    <a href="#recordings" data-perm="canReview">录音</a>
+    <a href="#mutes" data-perm="canReview">禁麦</a>
+    <a href="#users" data-perm="isAdmin">账号</a>
+    <a href="#audit" data-perm="isAdmin">审计日志</a>
+    <a href="#account">我的账号</a>
+  </nav>
+  <span id="whoami"></span>
+</header>
+
+<main id="main">
+  <section id="login" hidden>
+    <h2>登录</h2>
+    <p class="hint">在游戏里执行 <code>/bvc web</code> 获取一次性登录链接；设置过密码后也可以在这里直接登录。</p>
+    <p id="login-expired" class="error" hidden>登录链接已失效或已被使用，请重新执行 <code>/bvc web</code>。</p>
+    <form id="login-form">
+      <label>用户名（游戏名）<input name="username" autocomplete="username" required></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+      <button>登录</button>
+      <span class="error" id="login-error"></span>
+    </form>
+  </section>
+
+  <section id="view"></section>
+</main>
+
+<template id="tpl-reports">
+  <h2>举报</h2>
+  <div class="toolbar">
+    <select id="report-status">
+      <option value="OPEN">待处理</option>
+      <option value="COLLECTING">收集中</option>
+      <option value="ACCEPTED">已处理（成立）</option>
+      <option value="REJECTED">已处理（不成立）</option>
+      <option value="">全部</option>
+    </select>
+    <button id="report-refresh">刷新</button>
+  </div>
+  <table class="list">
+    <thead><tr><th>#</th><th>时间</th><th>子服</th><th>举报人</th><th>被举报人</th><th>原因</th><th>状态</th></tr></thead>
+    <tbody id="report-rows"></tbody>
+  </table>
+</template>
+
+<template id="tpl-report">
+  <p><a href="#reports">← 返回举报列表</a></p>
+  <h2 id="r-title"></h2>
+  <dl class="facts" id="r-facts"></dl>
+  <div class="player">
+    <div class="toolbar">
+      <button id="p-play">▶ 播放</button>
+      <button id="p-stop">■ 停止</button>
+      <span id="p-time">00:00</span>
+      <label><input type="checkbox" id="p-heard-only"> 只播举报人听到的</label>
+      <span class="hint">点击时间轴跳转；每行可单独静音或独听。</span>
+    </div>
+    <div id="p-timeline" class="timeline"></div>
+  </div>
+  <h3>处理</h3>
+  <div class="toolbar">
+    <input id="r-note" placeholder="备注（可选）" size="40">
+    <button id="r-accept">举报成立</button>
+    <button id="r-reject">不成立</button>
+    <button id="r-reopen">重新打开</button>
+  </div>
+  <div id="r-mute" class="toolbar" hidden>
+    <strong>禁麦被举报人：</strong>
+    <select id="r-mute-scope"></select>
+    <select id="r-mute-minutes">
+      <option value="30">30 分钟</option><option value="360">6 小时</option><option value="1440">1 天</option>
+      <option value="10080">7 天</option><option value="0">永久</option>
+    </select>
+    <input id="r-mute-reason" placeholder="原因" size="24">
+    <button id="r-mute-go">禁麦</button>
+  </div>
+  <p id="r-msg"></p>
+</template>
+
+<template id="tpl-recordings">
+  <h2>搜索录音</h2>
+  <form class="toolbar" id="rec-form">
+    <input name="player" placeholder="玩家名（可空）">
+    <input name="server" placeholder="子服（可空）">
+    <label>从 <input name="from" type="datetime-local"></label>
+    <label>到 <input name="to" type="datetime-local"></label>
+    <button>搜索</button>
+  </form>
+  <table class="list">
+    <thead><tr><th>时间</th><th>子服</th><th>说话人</th><th>时长</th><th></th></tr></thead>
+    <tbody id="rec-rows"></tbody>
+  </table>
+</template>
+
+<template id="tpl-mutes">
+  <h2>禁麦</h2>
+  <form class="toolbar" id="mute-search">
+    <input name="player" placeholder="玩家名" required>
+    <button>查询</button>
+  </form>
+  <div id="mute-result"></div>
+  <div id="mute-form-box" hidden>
+    <h3>新增禁麦</h3>
+    <form class="toolbar" id="mute-form">
+      <input name="player" placeholder="玩家名" required>
+      <input name="scope" placeholder="范围：* 或子服名" value="*" size="10">
+      <select name="minutes">
+        <option value="30">30 分钟</option><option value="360">6 小时</option><option value="1440">1 天</option>
+        <option value="10080">7 天</option><option value="0">永久</option>
+      </select>
+      <input name="reason" placeholder="原因" size="24">
+      <button>禁麦</button>
+    </form>
+  </div>
+  <p id="mute-msg"></p>
+</template>
+
+<template id="tpl-users">
+  <h2>面板账号</h2>
+  <p class="hint">管理员在游戏里第一次执行 <code>/bvc web</code> 时自动创建账号，权限跟随游戏里的 <code>bvc.web.*</code>，每次登录链接都会同步一次。</p>
+  <table class="list">
+    <thead><tr><th>用户名</th><th>查看</th><th>禁麦</th><th>管理</th><th>密码</th><th></th></tr></thead>
+    <tbody id="user-rows"></tbody>
+  </table>
+</template>
+
+<template id="tpl-audit">
+  <h2>审计日志</h2>
+  <table class="list">
+    <thead><tr><th>时间</th><th>用户</th><th>操作</th><th>详情</th></tr></thead>
+    <tbody id="audit-rows"></tbody>
+  </table>
+  <button id="audit-more">更多</button>
+</template>
+
+<template id="tpl-account">
+  <h2>我的账号</h2>
+  <p id="acc-info"></p>
+  <form class="toolbar" id="acc-form">
+    <input name="password" type="password" placeholder="新密码（至少 8 位）" autocomplete="new-password">
+    <button>设置密码</button>
+    <button type="button" id="acc-clear">删除密码（只能用游戏链接登录）</button>
+  </form>
+  <p id="acc-msg"></p>
+  <button id="logout">退出登录</button>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

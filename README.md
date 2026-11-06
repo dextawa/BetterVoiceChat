@@ -23,7 +23,7 @@
 | 客户端核心（连接、Opus、混音、3D 方位、按键说话 / 声控） | ✅ 完成，有测试（和 BC 核心在同一进程里联调） |
 | 客户端 Mod 1.16.5、1.18.2、1.19.2、1.19.4、1.20.1 Fabric / Forge；1.20.4–1.21.11、26.1–26.3 Fabric / NeoForge（32 个 jar） | ✅ 31 个在真实客户端里进服并连上语音（Velocity + Paper 1.21.4 + ViaVersion/ViaBackwards）；1.16.5 Forge 的开发环境启动即崩（原版代码里的映射问题），静态检查通过，未真机验证 |
 | 客户端 Mod 1.8.9、1.12.2 Forge | ✅ 在真实客户端里进服并连上语音（同一测试环境，另装 ViaRewind） |
-| 录音、举报、Web 面板 | ⏳ 未开始 |
+| 录音、举报、Web 面板 | ✅ 完成，有测试；在 Velocity + Paper 1.21.4 上端到端验证（机器人说真实 Opus → `/vreport` → 面板里查看证据、回放、处理、禁麦、审计），回放用 ffmpeg 和 Chrome 解码验证 |
 
 ## 构建
 
@@ -41,6 +41,15 @@
 - Mod 子服（Fabric / NeoForge / Forge 独立服务端）：直接装客户端 Mod 的 jar（见 `client/modern`），它在独立服务端上会以子服的身份运行，配置在 `config/bettervoicechat/config.yml`，按世界设置时世界名写维度 ID（如 `"minecraft:the_nether"`）。Mod 子服没有权限插件，`bvc.priority.*` / `bvc.broadcast` 只能通过 API 设置；`/bvcs` 需要 2 级 OP。
 
 子服的语音规则在子服的 `plugins/BetterVoiceChat/config.yml` 里设置（范围麦 / 组队麦 / 自由麦、半径、只允许按键说话、按世界设置、旁观者），BC 的设置在 BC 的 `plugins/bettervoicechat/config.yml`（Velocity）或 `plugins/BetterVoiceChat/config.yml`（BungeeCord）里（传输方式、是否强制装 Mod、码率）。
+
+### 录音、举报和 Web 面板
+
+- BC 把转发过的语音原样录下来（Opus，不转码），存在 `plugins/bettervoicechat/recordings/`，总量默认上限 1GB，满了删最旧的。**请在服务器规则或进服提示里告知玩家语音会被录音。**
+- 玩家用 `/vreport <玩家> [原因]` 举报（不需要权限，有冷却）。证据包包含举报前 5 分钟、举报后 2 分钟里被举报人和举报人说的话，以及举报人这段时间听到的所有人的话，单独存放在 `reports/`，不会被滚动删除。拥有 `bvc.report.notify` 的管理员会收到通知。
+- Web 面板默认监听 `127.0.0.1:8790`，建议用 Nginx 等反向代理加 HTTPS，并把 `web.public-url` 设成对外地址。
+  - 在游戏里执行 `/bvc web` 获取 5 分钟内有效的一次性登录链接；账号权限跟随 `bvc.web.review`（查看举报和录音）、`bvc.web.mute`（禁麦）、`bvc.web.admin`（账号管理、审计日志）。
+  - 登录后可以在“我的账号”里设置密码，以后不进游戏也能登录；第一次部署时也可以在 BC 控制台执行 `/bvc web <用户名> <密码>` 创建管理员账号。
+  - 功能：举报队列与处理、多轨回放（按说话人分轨，可静音 / 独听，可只播举报人听到的部分）、按玩家 / 子服 / 时间搜索录音、禁麦与解禁、审计日志（谁看了哪个举报、听了哪段录音、做了什么操作）。
 
 端到端测试见 [tools/e2e](tools/e2e/README.md)。
 

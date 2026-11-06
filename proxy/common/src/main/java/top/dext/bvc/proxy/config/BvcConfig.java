@@ -31,7 +31,23 @@ public record BvcConfig(
         int maxStreamsPerListener,
         float duckingDecibels,
         List<Integer> priorityLevels,
-        FallbackMode serversWithoutPlugin) {
+        FallbackMode serversWithoutPlugin,
+        Recording recording,
+        Reports reports,
+        Web web) {
+
+    /** Rolling recording of everything that was forwarded. */
+    public record Recording(boolean enabled, long maxBytes, int segmentMinutes) {
+    }
+
+    /** {@code /vreport} and its evidence. */
+    public record Reports(boolean enabled, int beforeSeconds, int afterSeconds, int cooldownSeconds, int keepDays,
+                          List<String> aliases) {
+    }
+
+    /** Built-in web panel. */
+    public record Web(boolean enabled, String bind, int port, String publicUrl, int sessionHours) {
+    }
 
     public static final String RESOURCE = "bvc-proxy-config.yml";
 
@@ -95,7 +111,43 @@ public record BvcConfig(
                 clamp(node.integer("audio.max-streams-per-listener", 8), 1, 64),
                 (float) Math.max(0, node.decimal("audio.ducking-db", 12.0)),
                 Collections.unmodifiableList(levels),
-                node.enumValue("servers-without-plugin", FallbackMode.class, FallbackMode.DISABLED));
+                node.enumValue("servers-without-plugin", FallbackMode.class, FallbackMode.DISABLED),
+                new Recording(
+                        node.bool("recording.enabled", true),
+                        Math.max(16L << 20, node.longValue("recording.max-size-mb", 1024) << 20),
+                        clamp(node.integer("recording.segment-minutes", 60), 5, 24 * 60)),
+                new Reports(
+                        node.bool("reports.enabled", true),
+                        clamp(node.integer("reports.before-seconds", 300), 10, 3600),
+                        clamp(node.integer("reports.after-seconds", 120), 0, 1800),
+                        clamp(node.integer("reports.cooldown-seconds", 120), 0, 86_400),
+                        clamp(node.integer("reports.keep-days", 90), 1, 3650),
+                        aliases(node.list("reports.command-aliases"))),
+                new Web(
+                        node.bool("web.enabled", true),
+                        node.string("web.bind", "127.0.0.1"),
+                        clamp(node.integer("web.port", 8790), 0, 65535),
+                        stripSlash(node.string("web.public-url", "")),
+                        clamp(node.integer("web.session-hours", 12), 1, 24 * 30)));
+    }
+
+    private static List<String> aliases(List<Object> values) {
+        List<String> out = new ArrayList<>();
+        for (Object value : values) {
+            String alias = String.valueOf(value).trim().toLowerCase(Locale.ROOT);
+            if (!alias.isEmpty() && !out.contains(alias)) {
+                out.add(alias);
+            }
+        }
+        if (out.isEmpty()) {
+            out.add("vreport");
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    private static String stripSlash(String url) {
+        String trimmed = url.trim();
+        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 
     private static int clamp(int value, int min, int max) {

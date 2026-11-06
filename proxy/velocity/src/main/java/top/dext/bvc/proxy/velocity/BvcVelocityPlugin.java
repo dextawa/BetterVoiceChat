@@ -62,6 +62,10 @@ public final class BvcVelocityPlugin {
         proxy.getEventManager().register(this, new VelocityListener(core, platform));
         CommandMeta meta = proxy.getCommandManager().metaBuilder("bvc").aliases("bettervoicechat").plugin(this).build();
         proxy.getCommandManager().register(meta, new VelocityCommand(core, platform));
+        java.util.List<String> reportNames = core.config().reports().aliases();
+        CommandMeta reportMeta = proxy.getCommandManager().metaBuilder(reportNames.get(0))
+                .aliases(reportNames.subList(1, reportNames.size()).toArray(new String[0])).plugin(this).build();
+        proxy.getCommandManager().register(reportMeta, new VelocityReportCommand(core, platform));
         try {
             VelocityInjector.inject(proxy, core);
         } catch (ReflectiveOperationException | RuntimeException e) {

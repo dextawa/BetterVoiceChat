@@ -55,10 +55,9 @@ final class InProcessNetwork implements AutoCloseable {
     private long backendSequence = 1;
 
     InProcessNetwork(Path dataDirectory, String proxyConfig) throws Exception {
-        if (proxyConfig != null) {
-            Files.createDirectories(dataDirectory);
-            Files.writeString(dataDirectory.resolve("config.yml"), proxyConfig);
-        }
+        // A free port for the web panel, so parallel test runs never collide on 8790.
+        Files.createDirectories(dataDirectory);
+        Files.writeString(dataDirectory.resolve("config.yml"), (proxyConfig == null ? "" : proxyConfig) + "\nweb:\n  port: 0\n");
         platform = new Platform(dataDirectory);
         core = new BvcProxyCore(platform);
         core.enable();
